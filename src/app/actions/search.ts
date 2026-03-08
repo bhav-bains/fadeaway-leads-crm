@@ -1,6 +1,35 @@
-import { scrapeWebsite } from '@/lib/scraper';
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
 
 export async function searchGooglePlaces(niche: string, city: string) {
+    const supabase = await createClient();
+
+    // 1. Get Workspace ID to isolate Cache
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { error: 'Not authenticated' };
+
+    const { data: profile } = await supabase.from('profiles').select('workspace_id').eq('id', user.id).single();
+    if (!profile || !profile.workspace_id) return { error: 'No workspace found for user' };
+
+    const queryStr = `${niche} in ${city}`.toLowerCase();
+
+    // 2. Check Cache
+    const { data: existingRun } = await supabase
+        .from('runs')
+        .select('totals_json, id')
+        .eq('workspace_id', profile.workspace_id)
+        .eq('query', queryStr)
+        .eq('status', 'done')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+    if (existingRun && existingRun.totals_json?.results) {
+        return { data: existingRun.totals_json.results };
+    }
+
+    // 3. Google API Fetch
     let cleanData: any[] = [];
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
 
@@ -29,8 +58,6 @@ export async function searchGooglePlaces(niche: string, city: string) {
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error("Google Places API error:", errorText);
                 return { error: 'Failed to fetch places from Google.' };
             }
 
@@ -59,31 +86,14 @@ export async function searchGooglePlaces(niche: string, city: string) {
         }
     }
 
-    // 20-Point Scraper Phase 6 Upgrade
-    // Run scraping on all results in parallel.
-    const enrichedPromises = cleanData.map(async (lead: any) => {
-        let urlToScrape = lead.website;
-        if (urlToScrape && !urlToScrape.startsWith('http')) {
-            urlToScrape = `https://${urlToScrape}`;
-        }
+    // 4. Save to Cache
+    await supabase.from('runs').insert([{
+        workspace_id: profile.workspace_id,
+        query: queryStr,
+        city: city.toLowerCase(),
+        status: 'done',
+        totals_json: { results: cleanData }
+    }]);
 
-        if (!urlToScrape) {
-            return { ...lead, score: 0, email: '', biggestWeakness: '🔴 No Website Found', bookingDetected: false }
-        }
-        try {
-            const scrape = await scrapeWebsite(urlToScrape, city, niche, lead.ratingCount);
-            return {
-                ...lead,
-                score: scrape.totalScore,
-                email: scrape.emails[0]?.email || '',
-                biggestWeakness: scrape.biggestWeakness,
-                bookingDetected: scrape.seoAudit.has_booking_link
-            }
-        } catch (e) {
-            return { ...lead, score: 0, email: '', biggestWeakness: '🔴 Failed to scrape website', bookingDetected: false }
-        }
-    });
-
-    const enrichedData = await Promise.all(enrichedPromises);
-    return { data: enrichedData };
+    return { data: cleanData };
 }

@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Search, MapPin, Building2, Download, Send, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
-import { insertLead } from "@/app/actions/leads";
+import { insertLead, runLocalSeoAudit } from "@/app/actions/leads";
 import { searchGooglePlaces } from "@/app/actions/search";
 
 export default function LeadFinder() {
@@ -23,12 +23,14 @@ export default function LeadFinder() {
     const [results, setResults] = useState<any[]>([]);
 
     // Filters
-    const [minScore, setMinScore] = useState([7]);
+    const [minScore, setMinScore] = useState([0]); // Default to 0 so unaudited leads show up
     const [requireEmail, setRequireEmail] = useState(false);
     const [ratingFilter, setRatingFilter] = useState("all");
 
-    // Selection
+    // Selection & Auditing
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [auditedLeads, setAuditedLeads] = useState<Record<string, any>>({});
+    const [isAuditing, setIsAuditing] = useState<Record<string, boolean>>({});
 
     const { leads, addLead } = useLeadStore();
 
@@ -48,9 +50,14 @@ export default function LeadFinder() {
             toast.error(error);
             setResults([]);
         } else if (data) {
+            // Reset state for new search
             setResults(data);
             setSelectedIds(new Set());
-            toast.success(`Found and audited ${data.length} businesses.`);
+            setAuditedLeads({});
+            setIsAuditing({});
+            setMinScore([0]); // Reset score filter to see new results
+            setRequireEmail(false);
+            toast.success(`Found ${data.length} businesses. Select leads to run SEO Audit.`);
         }
         setIsSearching(false);
     };
@@ -70,6 +77,39 @@ export default function LeadFinder() {
         setSelectedIds(newSet);
     };
 
+    const handleRunAudit = async (lead: any) => {
+        setIsAuditing(prev => ({ ...prev, [lead.id]: true }));
+        const { data, error } = await runLocalSeoAudit(lead.website, lead.city, lead.niche, lead.ratingCount);
+        setIsAuditing(prev => ({ ...prev, [lead.id]: false }));
+
+        if (data) {
+            setAuditedLeads(prev => ({ ...prev, [lead.id]: data }));
+            toast.success(`Audit complete for ${lead.name}`);
+        } else {
+            toast.error(`Audit failed: ${error}`);
+        }
+    };
+
+    const handleBulkAudit = async () => {
+        const selectedLeads = results.filter(r => selectedIds.has(r.id) && !auditedLeads[r.id] && !isAuditing[r.id]);
+        if (selectedLeads.length === 0) {
+            toast.info("No unaudited leads selected.");
+            return;
+        }
+
+        toast.info(`Auditing ${selectedLeads.length} leads... this will take a moment.`);
+
+        for (const lead of selectedLeads) {
+            setIsAuditing(prev => ({ ...prev, [lead.id]: true }));
+            const { data } = await runLocalSeoAudit(lead.website, lead.city, lead.niche, lead.ratingCount);
+            setIsAuditing(prev => ({ ...prev, [lead.id]: false }));
+            if (data) {
+                setAuditedLeads(prev => ({ ...prev, [lead.id]: data }));
+            }
+        }
+        toast.success("Bulk audit complete!");
+    };
+
     const handleBulkPipeline = async () => {
         const selectedLeads = results.filter(r => selectedIds.has(r.id));
         if (selectedLeads.length === 0) return;
@@ -80,6 +120,8 @@ export default function LeadFinder() {
         for (const business of selectedLeads) {
             if (leads.some(l => l.name === business.name)) continue;
 
+            const auditData = auditedLeads[business.id];
+
             const result = await insertLead({
                 name: business.name,
                 address: business.address,
@@ -88,7 +130,7 @@ export default function LeadFinder() {
                 phone: business.phone,
                 website: business.website,
                 reviewCount: business.ratingCount
-            });
+            }, auditData?.rawScrape);
 
             if (!result.error && result.data) {
                 successCount++;
@@ -99,9 +141,9 @@ export default function LeadFinder() {
                     address: `${dbCompany.address}, ${dbCompany.city}`,
                     phone: dbCompany.phone,
                     website: dbCompany.website,
-                    email: business.email, // Fast mock state bridging
-                    score: business.score,
-                    biggestWeakness: business.biggestWeakness,
+                    email: auditData?.email || '',
+                    score: auditData?.score || 0,
+                    biggestWeakness: auditData?.biggestWeakness || '',
                     status: dbCompany.status as any,
                     createdAt: dbCompany.created_at,
                     workspaceId: dbCompany.workspace_id,
@@ -119,17 +161,20 @@ export default function LeadFinder() {
         if (selectedLeads.length === 0) return;
 
         const headers = ["Business Name", "City", "Rating", "Email", "SEO Score", "Weakness", "Booking Detected", "Website", "Phone"];
-        const rows = selectedLeads.map(l => [
-            `"${l.name}"`,
-            `"${l.city}"`,
-            l.rating,
-            `"${l.email || ''}"`,
-            l.score,
-            `"${l.biggestWeakness}"`,
-            l.bookingDetected ? "Yes" : "No",
-            `"${l.website}"`,
-            `"${l.phone}"`
-        ]);
+        const rows = selectedLeads.map(l => {
+            const auditData = auditedLeads[l.id];
+            return [
+                `"${l.name}"`,
+                `"${l.city}"`,
+                l.rating,
+                `"${auditData?.email || ''}"`,
+                auditData?.score || 0,
+                `"${auditData?.biggestWeakness || ''}"`,
+                auditData?.bookingDetected ? "Yes" : "No",
+                `"${l.website}"`,
+                `"${l.phone}"`
+            ];
+        });
 
         const csvContent = "data:text/csv;charset=utf-8,"
             + headers.join(",") + "\n"
@@ -147,13 +192,20 @@ export default function LeadFinder() {
 
     const filteredResults = useMemo(() => {
         return results.filter(r => {
-            if (r.score < minScore[0]) return false;
-            if (requireEmail && (!r.email || r.email.trim() === '')) return false;
+            const auditData = auditedLeads[r.id];
+
+            if (minScore[0] > 0) {
+                if (!auditData || auditData.score < minScore[0]) return false;
+            }
+            if (requireEmail) {
+                if (!auditData || !auditData.email || auditData.email.trim() === '') return false;
+            }
+
             if (ratingFilter === "high" && r.rating < 4.0) return false;
             if (ratingFilter === "low" && r.rating >= 4.0) return false;
             return true;
         });
-    }, [results, minScore, requireEmail, ratingFilter]);
+    }, [results, minScore, requireEmail, ratingFilter, auditedLeads]);
 
     return (
         <div className="flex flex-col gap-6 pb-12">
@@ -261,8 +313,11 @@ export default function LeadFinder() {
                                 <Button variant="secondary" size="sm" onClick={handleExportCSV} className="h-8">
                                     <Download className="h-4 w-4 mr-2" /> Export CSV
                                 </Button>
+                                <Button variant="secondary" size="sm" onClick={handleBulkAudit} className="h-8">
+                                    <Search className="h-4 w-4 mr-2" /> Run Audit
+                                </Button>
                                 <Button id="bulk-assign-btn" variant="default" size="sm" onClick={handleBulkPipeline} className="h-8 bg-black text-white hover:bg-black/80">
-                                    <Send className="h-4 w-4 mr-2" /> Assign Sequence
+                                    <Send className="h-4 w-4 mr-2" /> Save to Pipeline
                                 </Button>
                             </div>
                         </div>
@@ -295,63 +350,89 @@ export default function LeadFinder() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    filteredResults.map((result) => (
-                                        <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
-                                            <TableCell>
-                                                <Checkbox
-                                                    checked={selectedIds.has(result.id)}
-                                                    onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
-                                                />
-                                            </TableCell>
-                                            <TableCell className="font-medium">
-                                                <div className="truncate" title={result.name}>{result.name}</div>
-                                                <div className="text-xs text-muted-foreground mt-0.5 truncate">{result.city} | {result.biggestWeakness}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-1 text-sm font-medium">
-                                                    ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {result.email ? (
-                                                    <span className="text-sm font-medium">{result.email}</span>
-                                                ) : (
-                                                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Not Found</span>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                {result.bookingDetected ? (
-                                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Yes</Badge>
-                                                ) : (
-                                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Missing</Badge>
-                                                )}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                <Badge variant={result.score >= 12 ? 'default' : (result.score >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold text-xs">
-                                                    {result.score}/20
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="h-8 w-8 p-0"
-                                                    onClick={() => {
-                                                        const newSet = new Set([result.id]);
-                                                        setSelectedIds(newSet);
-                                                        // Hacky way to trigger the bulk action for just this one immediately
-                                                        setTimeout(() => {
-                                                            document.getElementById('bulk-assign-btn')?.click();
-                                                        }, 50);
-                                                    }}
-                                                    disabled={leads.some(l => l.name === result.name)}
-                                                    title="Save to Pipeline"
-                                                >
-                                                    <Send className="h-4 w-4 text-primary" />
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
+                                    filteredResults.map((result) => {
+                                        const auditData = auditedLeads[result.id];
+                                        const isAuditingRow = isAuditing[result.id];
+
+                                        return (
+                                            <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
+                                                <TableCell>
+                                                    <Checkbox
+                                                        checked={selectedIds.has(result.id)}
+                                                        onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="font-medium">
+                                                    <div className="truncate" title={result.name}>{result.name}</div>
+                                                    <div className="text-xs text-muted-foreground mt-0.5 truncate">{result.city} {auditData?.biggestWeakness ? `| ${auditData.biggestWeakness}` : ''}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-1 text-sm font-medium">
+                                                        ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {!auditData ? (
+                                                        <span className="text-xs text-muted-foreground">-</span>
+                                                    ) : auditData.email ? (
+                                                        <span className="text-sm font-medium">{auditData.email}</span>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Not Found</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    {!auditData ? (
+                                                        <span className="text-xs text-muted-foreground">-</span>
+                                                    ) : auditData.bookingDetected ? (
+                                                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Yes</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Missing</Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    {!auditData ? (
+                                                        <span className="text-xs text-muted-foreground">-</span>
+                                                    ) : (
+                                                        <Badge variant={auditData.score >= 12 ? 'default' : (auditData.score >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold text-xs">
+                                                            {auditData.score}/20
+                                                        </Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-1">
+                                                        {!auditData && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-8 w-8 p-0"
+                                                                onClick={() => handleRunAudit(result)}
+                                                                disabled={isAuditingRow}
+                                                                title="Run SEO Audit"
+                                                            >
+                                                                {isAuditingRow ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 text-blue-500" />}
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-8 w-8 p-0"
+                                                            onClick={() => {
+                                                                const newSet = new Set([result.id]);
+                                                                setSelectedIds(newSet);
+                                                                setTimeout(() => {
+                                                                    document.getElementById('bulk-assign-btn')?.click();
+                                                                }, 50);
+                                                            }}
+                                                            disabled={leads.some(l => l.name === result.name)}
+                                                            title="Save to Pipeline"
+                                                        >
+                                                            <Send className="h-4 w-4 text-primary" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })
                                 )}
                             </TableBody>
                         </Table>

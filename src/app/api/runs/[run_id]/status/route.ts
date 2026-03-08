@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-export async function GET(req: Request, { params }: { params: { run_id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ run_id: string }> }) {
     try {
-        const runId = params.run_id;
+        const resolvedParams = await params;
+        const runId = resolvedParams.run_id;
         if (!runId || runId === 'undefined') {
             return NextResponse.json({ error: 'Invalid run_id' }, { status: 400 });
         }

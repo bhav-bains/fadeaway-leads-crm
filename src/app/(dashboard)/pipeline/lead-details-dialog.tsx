@@ -11,8 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Lead, useLeadStore } from "@/store/leadStore";
 import { toast } from "sonner";
-import { STAGES } from "./page";
 import { Activity, AlertOctagon, Mail, Phone, ExternalLink } from "lucide-react";
+
+const STAGES = ['New', 'Contacted', 'Booked', 'Closed'];
 
 interface LeadDetailsDialogProps {
     lead: Lead;
@@ -87,7 +88,7 @@ export function LeadDetailsDialog({ lead, open, onOpenChange }: LeadDetailsDialo
                                 <SelectValue placeholder="Select stage" />
                             </SelectTrigger>
                             <SelectContent>
-                                {STAGES.map(s => (
+                                {STAGES.map((s: string) => (
                                     <SelectItem key={s} value={s}>{s}</SelectItem>
                                 ))}
                             </SelectContent>

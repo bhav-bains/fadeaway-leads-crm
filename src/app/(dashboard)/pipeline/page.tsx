@@ -281,7 +281,7 @@ export default function CommandDashboard() {
                                 <Label htmlFor="req-email" className="text-xs cursor-pointer font-medium">Has Email</Label>
                             </div>
 
-                            <Select value={ratingRange} onValueChange={v => { setRatingRange(v); setPage(1); }}>
+                            <Select value={ratingRange} onValueChange={v => { setRatingRange(v || 'all'); setPage(1); }}>
                                 <SelectTrigger className="w-full sm:w-[140px] h-8 text-xs bg-background">
                                     <SelectValue placeholder="Rating" />
                                 </SelectTrigger>
@@ -377,7 +377,7 @@ export default function CommandDashboard() {
                                                     </TableCell>
                                                     <TableCell className="text-center">
                                                         <Tooltip>
-                                                            <TooltipTrigger asChild>
+                                                            <TooltipTrigger>
                                                                 <Badge variant={scoreObj.score_overall >= 15 ? 'default' : (scoreObj.score_overall >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold cursor-help">
                                                                     {scoreObj.score_overall || 0}/20
                                                                 </Badge>
@@ -434,7 +434,7 @@ export default function CommandDashboard() {
                                             <SortableContext id={stage} items={stageLeads.map(l => l.id)} strategy={verticalListSortingStrategy}>
                                                 {stageLeads.map(lead => (
                                                     <div key={lead.id} onClick={(e) => setActiveLead(lead)}>
-                                                        <SortableItem id={lead.id} lead={lead} />
+                                                        <KanbanCard lead={lead} />
                                                     </div>
                                                 ))}
                                             </SortableContext>
@@ -460,7 +460,7 @@ export default function CommandDashboard() {
                     <div className="py-4 space-y-4">
                         <div className="space-y-1.5">
                             <Label>Hormozi-Style Template</Label>
-                            <Select value={selectedTemplate} onValueChange={handleTemplateChange}>
+                            <Select value={selectedTemplate as string} onValueChange={(v) => handleTemplateChange(v || '')}>
                                 <SelectTrigger className="bg-background">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -538,7 +538,7 @@ export default function CommandDashboard() {
                                                     <p className="text-xs text-slate-600 line-clamp-2 italic">"{msg.subject}"</p>
 
                                                     <div className="flex items-center gap-3 pt-2 border-t mt-2 text-xs">
-                                                        <span className={`flex items-center gap-1 ${msg.open_count > 0 ? 'text-green-600 font-medium' : 'text-slate-400'}`}><CheckCircle className="h-3.5 w-3.5" /> Opens: {msg.open_count}</span>
+                                                        <span className={`flex items-center gap-1 ${msg.open_count > 0 ? 'text-green-600 font-medium' : 'text-slate-400'}`}><CheckCircle2 className="h-3.5 w-3.5" /> Opens: {msg.open_count}</span>
                                                         <span className={`flex items-center gap-1 ${msg.click_count > 0 ? 'text-purple-600 font-medium' : 'text-slate-400'}`}><Globe className="h-3.5 w-3.5" /> Clicks: {msg.click_count}</span>
                                                         <span className={`flex items-center gap-1 ${msg.reply_flag ? 'text-orange-500 font-medium' : 'text-slate-400'}`}><Mail className="h-3.5 w-3.5" /> Replies: {msg.reply_flag ? 'Yes' : 'No'}</span>
                                                     </div>

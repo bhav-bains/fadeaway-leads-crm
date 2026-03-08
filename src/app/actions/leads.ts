@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { scrapeWebsite } from '@/lib/scraper'
 
-export async function insertLead(leadData: { name: string, address: string, city: string, phone?: string, website?: string, niche?: string, reviewCount?: number }) {
+export async function insertLead(leadData: { name: string, address: string, city: string, phone?: string, website?: string, niche?: string, reviewCount?: number }, scrapeResult?: any) {
     const supabase = await createClient()
 
     // 1. Get current authenticated user
@@ -46,39 +46,31 @@ export async function insertLead(leadData: { name: string, address: string, city
 
     const companyId = company.id;
 
-    // 4. Run the SEO Audit Scraper
-    let scrapeResult = null;
-    let urlToScrape = leadData.website;
-    if (urlToScrape && !urlToScrape.startsWith('http')) {
-        urlToScrape = `https://${urlToScrape}`;
-    }
-
-    if (urlToScrape) {
-        scrapeResult = await scrapeWebsite(urlToScrape, leadData.city, leadData.niche || '', leadData.reviewCount || 0);
-
+    // 4. Save the SEO Audit Scraper Results (if provided)
+    if (scrapeResult) {
         // Insert SEO Audits
         await supabase.from('seo_audits').insert([{
             company_id: companyId,
-            has_title: scrapeResult.seoAudit.has_title,
-            title_len: scrapeResult.seoAudit.title_len,
-            has_h1: scrapeResult.seoAudit.has_h1,
-            has_booking_link: scrapeResult.seoAudit.has_booking_link,
-            schema_org_types: scrapeResult.seoAudit.has_schema ? ['Found'] : []
+            has_title: scrapeResult.seoAudit?.has_title || false,
+            title_len: scrapeResult.seoAudit?.title_len || 0,
+            has_h1: scrapeResult.seoAudit?.has_h1 || false,
+            has_booking_link: scrapeResult.seoAudit?.has_booking_link || false,
+            schema_org_types: scrapeResult.seoAudit?.has_schema ? ['Found'] : []
         }]);
 
         // Insert Scores
         await supabase.from('scores').insert([{
             company_id: companyId,
-            score_overall: scrapeResult.totalScore,
-            score_contactability: scrapeResult.contactabilityScore,
-            score_seo: scrapeResult.seoScore,
-            score_local_intent: scrapeResult.localIntentScore,
-            score_fit: scrapeResult.fitScore
+            score_overall: scrapeResult.totalScore || 0,
+            score_contactability: scrapeResult.contactabilityScore || 0,
+            score_seo: scrapeResult.seoScore || 0,
+            score_local_intent: scrapeResult.localIntentScore || 0,
+            score_fit: scrapeResult.fitScore || 0
         }]);
 
         // Insert Contacts
-        if (scrapeResult.emails.length > 0) {
-            const contactInserts = scrapeResult.emails.map(e => ({
+        if (scrapeResult.emails && scrapeResult.emails.length > 0) {
+            const contactInserts = scrapeResult.emails.map((e: any) => ({
                 company_id: companyId,
                 email: e.email,
                 type: e.type,
@@ -88,8 +80,8 @@ export async function insertLead(leadData: { name: string, address: string, city
         }
 
         // Insert Socials
-        if (scrapeResult.socials.length > 0) {
-            const socialInserts = scrapeResult.socials.map(s => ({
+        if (scrapeResult.socials && scrapeResult.socials.length > 0) {
+            const socialInserts = scrapeResult.socials.map((s: any) => ({
                 company_id: companyId,
                 platform: s.platform,
                 url: s.url
@@ -97,7 +89,7 @@ export async function insertLead(leadData: { name: string, address: string, city
             await supabase.from('socials').insert(socialInserts);
         }
     } else {
-        // Fallback empty scores if no website
+        // Fallback empty scores if no website or no audit performed
         await supabase.from('scores').insert([{
             company_id: companyId,
             score_overall: 0,
@@ -111,6 +103,32 @@ export async function insertLead(leadData: { name: string, address: string, city
     revalidatePath('/pipeline')
     revalidatePath('/lead-finder')
     return { data: { company, scrapeResult } }
+}
+
+export async function runLocalSeoAudit(website: string, city: string, niche: string, ratingCount: number) {
+    let urlToScrape = website;
+    if (urlToScrape && !urlToScrape.startsWith('http')) {
+        urlToScrape = `https://${urlToScrape}`;
+    }
+
+    if (!urlToScrape) {
+        return { error: "No Website Found", score: 0, email: '', biggestWeakness: '🔴 No Website Found', bookingDetected: false };
+    }
+
+    try {
+        const scrape = await scrapeWebsite(urlToScrape, city, niche, ratingCount);
+        return {
+            data: {
+                score: scrape.totalScore,
+                email: scrape.emails[0]?.email || '',
+                biggestWeakness: scrape.biggestWeakness,
+                bookingDetected: scrape.seoAudit.has_booking_link,
+                rawScrape: scrape
+            }
+        };
+    } catch (e: any) {
+        return { error: e.message || 'Failed to scrape website', score: 0, email: '', biggestWeakness: '🔴 Audit Failed', bookingDetected: false };
+    }
 }
 
 export async function fetchLeads() {
