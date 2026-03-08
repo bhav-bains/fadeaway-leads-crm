@@ -6,7 +6,10 @@ export interface Lead {
     address: string;
     phone?: string;
     website?: string;
-    status: 'Sourced' | 'Auditing' | 'Active Outreach' | 'Meeting Booked' | 'Needs Analysis' | 'Closed Won' | 'Closed Lost';
+    email?: string;
+    score?: number;
+    biggestWeakness?: string;
+    status: 'New' | 'Sourced' | 'Auditing' | 'Active Outreach' | 'Meeting Booked' | 'Needs Analysis' | 'Closed Won' | 'Closed Lost';
     createdAt: string;
     workspaceId: string;
 }

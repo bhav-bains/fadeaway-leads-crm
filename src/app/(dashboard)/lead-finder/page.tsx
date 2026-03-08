@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Search, MapPin, Building2, PlusCircle, CheckCircle2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
+import { Search, MapPin, Building2, Download, Send, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
 import { insertLead } from "@/app/actions/leads";
@@ -20,6 +22,14 @@ export default function LeadFinder() {
     const [isSearching, setIsSearching] = useState(false);
     const [results, setResults] = useState<any[]>([]);
 
+    // Filters
+    const [minScore, setMinScore] = useState([7]);
+    const [requireEmail, setRequireEmail] = useState(false);
+    const [ratingFilter, setRatingFilter] = useState("all");
+
+    // Selection
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
     const { leads, addLead } = useLeadStore();
 
     const handleSearch = async (e: React.FormEvent) => {
@@ -30,6 +40,8 @@ export default function LeadFinder() {
         }
 
         setIsSearching(true);
+        toast.info("Scraping in progress... this may take a few seconds.");
+
         const { data, error } = await searchGooglePlaces(niche, city);
 
         if (error) {
@@ -37,103 +49,164 @@ export default function LeadFinder() {
             setResults([]);
         } else if (data) {
             setResults(data);
-            toast.success(`Found ${data.length} businesses.`);
+            setSelectedIds(new Set());
+            toast.success(`Found and audited ${data.length} businesses.`);
         }
         setIsSearching(false);
     };
 
-    const handleAddToPipeline = async (business: any) => {
-        // Check if already in pipeline by name (simple mock check)
-        if (leads.some(l => l.name === business.name)) {
-            toast.error(`${business.name} is already in your pipeline.`);
-            return;
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedIds(new Set(filteredResults.map(r => r.id)));
+        } else {
+            setSelectedIds(new Set());
         }
-
-        const toastId = toast.loading("Adding to pipeline...");
-
-        const result = await insertLead({
-            name: business.name,
-            address: business.address,
-            city: business.city,
-            niche: business.niche,
-            phone: business.phone,
-            website: business.website,
-        });
-
-        if (result.error) {
-            toast.error(`Failed to add: ${result.error}`, { id: toastId });
-            return;
-        }
-
-        const dbLead = result.data;
-
-        const newLead: Lead = {
-            id: dbLead.id,
-            name: dbLead.company_name,
-            address: `${dbLead.address}, ${dbLead.city}`,
-            phone: dbLead.phone,
-            website: dbLead.website,
-            status: dbLead.status as any,
-            createdAt: dbLead.created_at,
-            workspaceId: dbLead.workspace_id,
-        };
-
-        addLead(newLead);
-        toast.success("Added to pipeline successfully!", { id: toastId });
     };
 
+    const handleSelectRow = (id: string, checked: boolean) => {
+        const newSet = new Set(selectedIds);
+        if (checked) newSet.add(id);
+        else newSet.delete(id);
+        setSelectedIds(newSet);
+    };
+
+    const handleBulkPipeline = async () => {
+        const selectedLeads = results.filter(r => selectedIds.has(r.id));
+        if (selectedLeads.length === 0) return;
+
+        const toastId = toast.loading(`Adding ${selectedLeads.length} leads to pipeline...`);
+        let successCount = 0;
+
+        for (const business of selectedLeads) {
+            if (leads.some(l => l.name === business.name)) continue;
+
+            const result = await insertLead({
+                name: business.name,
+                address: business.address,
+                city: business.city,
+                niche: business.niche,
+                phone: business.phone,
+                website: business.website,
+                reviewCount: business.ratingCount
+            });
+
+            if (!result.error && result.data) {
+                successCount++;
+                const dbCompany = result.data.company;
+                const newLead: Lead = {
+                    id: dbCompany.id,
+                    name: dbCompany.name,
+                    address: `${dbCompany.address}, ${dbCompany.city}`,
+                    phone: dbCompany.phone,
+                    website: dbCompany.website,
+                    email: business.email, // Fast mock state bridging
+                    score: business.score,
+                    biggestWeakness: business.biggestWeakness,
+                    status: dbCompany.status as any,
+                    createdAt: dbCompany.created_at,
+                    workspaceId: dbCompany.workspace_id,
+                };
+                addLead(newLead);
+            }
+        }
+
+        toast.success(`Successfully added ${successCount} leads to pipeline!`, { id: toastId });
+        setSelectedIds(new Set());
+    };
+
+    const handleExportCSV = () => {
+        const selectedLeads = results.filter(r => selectedIds.has(r.id));
+        if (selectedLeads.length === 0) return;
+
+        const headers = ["Business Name", "City", "Rating", "Email", "SEO Score", "Weakness", "Booking Detected", "Website", "Phone"];
+        const rows = selectedLeads.map(l => [
+            `"${l.name}"`,
+            `"${l.city}"`,
+            l.rating,
+            `"${l.email || ''}"`,
+            l.score,
+            `"${l.biggestWeakness}"`,
+            l.bookingDetected ? "Yes" : "No",
+            `"${l.website}"`,
+            `"${l.phone}"`
+        ]);
+
+        const csvContent = "data:text/csv;charset=utf-8,"
+            + headers.join(",") + "\n"
+            + rows.map(e => e.join(",")).join("\n");
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `fadeaway_leads_${city}_${niche}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        toast.success("CSV Exported successfully.");
+    };
+
+    const filteredResults = useMemo(() => {
+        return results.filter(r => {
+            if (r.score < minScore[0]) return false;
+            if (requireEmail && (!r.email || r.email.trim() === '')) return false;
+            if (ratingFilter === "high" && r.rating < 4.0) return false;
+            if (ratingFilter === "low" && r.rating >= 4.0) return false;
+            return true;
+        });
+    }, [results, minScore, requireEmail, ratingFilter]);
+
     return (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 pb-12">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight">Lead Finder</h1>
+                <h1 className="text-3xl font-bold tracking-tight">Lead Finder (SEO Auditor)</h1>
                 <p className="text-muted-foreground mt-2">
-                    Search for local businesses by niche and city to instantly generate prospects.
+                    Hunt down highly successful local businesses that have massive digital and SEO gaps.
                 </p>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Search Parameters</CardTitle>
-                    <CardDescription>Enter your target criteria to query the database.</CardDescription>
+            <Card className="border-primary/10 bg-primary/5">
+                <CardHeader className="pb-4">
+                    <CardTitle>Engine Parameters</CardTitle>
+                    <CardDescription>Enter your target ICP and let the Cheerio scraper audit them behind the scenes.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4 items-end">
                         <div className="grid gap-2 flex-1">
-                            <Label htmlFor="niche">Niche / Industry</Label>
+                            <Label htmlFor="niche" className="font-semibold text-foreground/80">Business Niche</Label>
                             <div className="relative">
                                 <Building2 className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     id="niche"
-                                    placeholder="e.g. HVAC, Plumber, Dentist"
-                                    className="pl-9"
+                                    placeholder="e.g. Plumber, Roofing, Dentist"
+                                    className="pl-9 bg-background"
                                     value={niche}
                                     onChange={(e) => setNiche(e.target.value)}
                                 />
                             </div>
                         </div>
                         <div className="grid gap-2 flex-1">
-                            <Label htmlFor="city">City / Location</Label>
+                            <Label htmlFor="city" className="font-semibold text-foreground/80">Target City</Label>
                             <div className="relative">
                                 <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     id="city"
                                     placeholder="e.g. Seattle, Toronto, Austin"
-                                    className="pl-9"
+                                    className="pl-9 bg-background"
                                     value={city}
                                     onChange={(e) => setCity(e.target.value)}
                                 />
                             </div>
                         </div>
-                        <Button type="submit" disabled={isSearching} className="w-full md:w-auto">
+                        <Button type="submit" disabled={isSearching} className="w-full md:w-auto font-medium px-8">
                             {isSearching ? (
                                 <>
                                     <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                    Searching...
+                                    Scraping...
                                 </>
                             ) : (
                                 <>
                                     <Search className="h-4 w-4 mr-2" />
-                                    Find Leads
+                                    Run Audit Scan
                                 </>
                             )}
                         </Button>
@@ -142,77 +215,148 @@ export default function LeadFinder() {
             </Card>
 
             {results.length > 0 && (
-                <Card className="overflow-hidden">
-                    <CardHeader>
-                        <CardTitle>Results ({results.length})</CardTitle>
-                        <CardDescription>Review and add viable prospects to your pipeline.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-0 sm:p-6">
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="min-w-[200px]">Business Name</TableHead>
-                                        <TableHead className="min-w-[150px]">Location</TableHead>
-                                        <TableHead className="min-w-[200px]">Website</TableHead>
-                                        <TableHead className="min-w-[120px]">Phone</TableHead>
-                                        <TableHead className="text-right min-w-[150px]">Action</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {results.map((result) => {
-                                        const isAdded = leads.some(l => l.name === result.name);
-                                        return (
-                                            <TableRow key={result.id}>
-                                                <TableCell className="font-medium max-w-[250px]">
-                                                    <div className="truncate" title={result.name}>{result.name}</div>
-                                                    <Badge variant="outline" className="mt-1">{result.niche}</Badge>
-                                                </TableCell>
-                                                <TableCell className="max-w-[200px]">
-                                                    <div className="truncate" title={`${result.address}, ${result.city}`}>
-                                                        {result.address}, {result.city}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="max-w-[200px]">
-                                                    {result.website ? (
-                                                        <a href={`https://${result.website}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline truncate block" title={result.website}>
-                                                            {result.website}
-                                                        </a>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">N/A</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>{result.phone || "N/A"}</TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button
-                                                        variant={isAdded ? "secondary" : "default"}
-                                                        size="sm"
-                                                        onClick={() => handleAddToPipeline(result)}
-                                                        disabled={isAdded}
-                                                    >
-                                                        {isAdded ? (
-                                                            <>
-                                                                <CheckCircle2 className="h-4 w-4 mr-1 sm:mr-2" />
-                                                                <span className="hidden sm:inline">Added</span>
-                                                                <span className="inline sm:hidden">Done</span>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <PlusCircle className="h-4 w-4 mr-1 sm:mr-2" />
-                                                                <span className="hidden sm:inline">Add to Pipeline</span>
-                                                                <span className="inline sm:hidden">Add</span>
-                                                            </>
-                                                        )}
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
+                <div className="space-y-4 animate-in fade-in duration-500">
+
+                    {/* Filters Bar */}
+                    <Card>
+                        <CardContent className="p-4 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-6 bg-slate-50 border-b">
+                            <div className="flex flex-col gap-2 w-full sm:w-auto sm:min-w-[200px]">
+                                <div className="flex justify-between">
+                                    <Label className="text-xs font-semibold text-muted-foreground">Min SEO Score</Label>
+                                    <span className="text-xs font-bold">{minScore[0]}/20</span>
+                                </div>
+                                <Slider
+                                    min={0} max={20} step={1}
+                                    value={minScore}
+                                    onValueChange={(v) => setMinScore(v as number[])}
+                                    className="w-full"
+                                />
+                            </div>
+
+                            <div className="flex items-center space-x-2 w-full sm:w-auto">
+                                <Checkbox id="has-email" checked={requireEmail} onCheckedChange={(c) => setRequireEmail(c as boolean)} />
+                                <Label htmlFor="has-email" className="text-sm cursor-pointer">Has Scraped Email</Label>
+                            </div>
+
+                            <div className="flex flex-col gap-1 w-full sm:w-auto sm:ml-auto">
+                                <Select value={ratingFilter} onValueChange={(v) => setRatingFilter(v as string)}>
+                                    <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">
+                                        <SelectValue placeholder="Rating Filter" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Google Ratings</SelectItem>
+                                        <SelectItem value="high">4.0 Stars and Up</SelectItem>
+                                        <SelectItem value="low">Under 4.0 Stars</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Bulk Actions Bar */}
+                    {selectedIds.size > 0 && (
+                        <div className="bg-primary text-primary-foreground py-3 px-4 rounded-md flex flex-col sm:flex-row items-center justify-between gap-3 sticky top-4 z-10 shadow-lg animate-in slide-in-from-bottom-2">
+                            <span className="font-semibold text-sm text-center sm:text-left w-full sm:w-auto">{selectedIds.size} Leads Selected</span>
+                            <div className="flex items-center gap-3 w-full sm:w-auto justify-center sm:justify-start">
+                                <Button variant="secondary" size="sm" onClick={handleExportCSV} className="h-8">
+                                    <Download className="h-4 w-4 mr-2" /> Export CSV
+                                </Button>
+                                <Button id="bulk-assign-btn" variant="default" size="sm" onClick={handleBulkPipeline} className="h-8 bg-black text-white hover:bg-black/80">
+                                    <Send className="h-4 w-4 mr-2" /> Assign Sequence
+                                </Button>
+                            </div>
                         </div>
-                    </CardContent>
-                </Card>
+                    )}
+
+                    {/* Dense Data Table */}
+                    <div className="rounded-md border bg-card">
+                        <Table>
+                            <TableHeader className="bg-muted/50">
+                                <TableRow>
+                                    <TableHead className="w-[50px]">
+                                        <Checkbox
+                                            checked={selectedIds.size === filteredResults.length && filteredResults.length > 0}
+                                            onCheckedChange={handleSelectAll}
+                                        />
+                                    </TableHead>
+                                    <TableHead className="w-[280px]">Business & City</TableHead>
+                                    <TableHead>Rating</TableHead>
+                                    <TableHead>Scraped Email</TableHead>
+                                    <TableHead className="text-center">Booking Link</TableHead>
+                                    <TableHead className="text-right">Audit Score</TableHead>
+                                    <TableHead className="w-[80px]"></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredResults.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                            No leads match the current filters.
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    filteredResults.map((result) => (
+                                        <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={selectedIds.has(result.id)}
+                                                    onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
+                                                />
+                                            </TableCell>
+                                            <TableCell className="font-medium">
+                                                <div className="truncate" title={result.name}>{result.name}</div>
+                                                <div className="text-xs text-muted-foreground mt-0.5 truncate">{result.city} | {result.biggestWeakness}</div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-1 text-sm font-medium">
+                                                    ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {result.email ? (
+                                                    <span className="text-sm font-medium">{result.email}</span>
+                                                ) : (
+                                                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Not Found</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {result.bookingDetected ? (
+                                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Yes</Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Missing</Badge>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Badge variant={result.score >= 12 ? 'default' : (result.score >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold text-xs">
+                                                    {result.score}/20
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-8 w-8 p-0"
+                                                    onClick={() => {
+                                                        const newSet = new Set([result.id]);
+                                                        setSelectedIds(newSet);
+                                                        // Hacky way to trigger the bulk action for just this one immediately
+                                                        setTimeout(() => {
+                                                            document.getElementById('bulk-assign-btn')?.click();
+                                                        }, 50);
+                                                    }}
+                                                    disabled={leads.some(l => l.name === result.name)}
+                                                    title="Save to Pipeline"
+                                                >
+                                                    <Send className="h-4 w-4 text-primary" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </div>
             )}
         </div>
     );

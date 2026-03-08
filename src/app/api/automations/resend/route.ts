@@ -1,39 +1,92 @@
 import { NextResponse } from 'next/server';
-import { Resend } from 'resend';
+import { createClient } from '@/lib/supabase/server';
+import { parseEmailTemplate } from '@/lib/outreach';
 
-// Initialize with a mock / optional key. Resend sdk handles missing key if gracefully handled.
-const resend = new Resend(process.env.RESEND_API_KEY || 're_mock_key');
+export async function POST(req: Request) {
+    const supabase = await createClient();
 
-export async function POST(request: Request) {
+    // 1. Authenticate user and get workspace
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('workspace_id')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile?.workspace_id) {
+        return NextResponse.json({ error: "No workspace found" }, { status: 400 });
+    }
+
+    // 2. Parse request body
+    const { companyId, contactEmail, sequenceName, subject, rawBodyTemplate } = await req.json();
+
+    if (!companyId || !contactEmail || !sequenceName || !subject || !rawBodyTemplate) {
+        return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
     try {
-        const body = await request.json();
-        const { leadId, name, email, stage } = body;
+        // 3. Token Parser Logic
+        const parsedBody = await parseEmailTemplate(rawBodyTemplate, companyId, profile.workspace_id);
 
-        console.log(`[Automations] Triggering ${stage} sequence for:`, name, email);
+        // 4. Send Email via Resend
+        // (If RESEND_API_KEY is not set or disabled, we simulate a successful send for dev MVP)
+        let resendId = `sim_${Date.now()}`;
+        const DISABLE_EMAIL_SEND = true; // Added to temporarily stop automatic emails
 
-        if (!process.env.RESEND_API_KEY) {
-            console.log("[Automations] No RESEND_API_KEY found. Simulating email send.");
-            return NextResponse.json({ success: true, simulated: true, mockMessage: "Email sent to output via mock." });
+        if (!DISABLE_EMAIL_SEND && process.env.RESEND_API_KEY) {
+            const res = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    from: 'Fadeaway Leads <hello@fadeawayleads.com>', // MUST BE verified in Resend
+                    to: [contactEmail],
+                    subject: subject,
+                    text: parsedBody // Sending as plain text for max deliverability
+                })
+            });
+
+            if (!res.ok) {
+                const err = await res.text();
+                throw new Error(`Resend API Error: ${err}`);
+            }
+
+            const resendData = await res.json();
+            resendId = resendData.id;
+        } else {
+            console.log(`[Email Simulated] To: ${contactEmail} | Subject: ${subject}`);
+            console.log(`[Email Body]:\n${parsedBody}`);
         }
 
-        const data = await resend.emails.send({
-            from: 'Fadeaway CRM <outbound@fadeaway-leads.com>', // Or verified domain
-            to: [email],
-            subject: `Hey ${name} - Question about your services`,
-            html: `
-                <div>
-                    <p>Hi there,</p>
-                    <p>I was looking for businesses in your area and noticed your team. I had a quick question about your services.</p>
-                    <p>Do you have 5 minutes for a quick chat next week?</p>
-                    <p>Best,<br/>Sarah<br/>Fadeaway Creatives</p>
-                </div>
-            `,
-        });
+        // 5. Save Engagement History
+        await supabase.from('outreach_messages').insert([{
+            company_id: companyId,
+            sequence_name: sequenceName,
+            step: 1,
+            subject: subject,
+            body: parsedBody,
+            sent_at: new Date().toISOString(),
+            status: 'sent',
+            open_count: 0,
+            click_count: 0,
+            reply_flag: false
+        }]);
 
-        return NextResponse.json({ success: true, data });
+        // 6. Auto-Movement (Contacted)
+        await supabase.from('companies')
+            .update({ status: 'Contacted' })
+            .eq('id', companyId);
 
-    } catch (error: any) {
-        console.error("[Automations] Error sending email:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ success: true, messageId: resendId, parsedBody });
+
+    } catch (e: any) {
+        console.error("Outreach dispatch failed:", e);
+        return NextResponse.json({ error: e.message || "Failed to dispatch sequence" }, { status: 500 });
     }
 }

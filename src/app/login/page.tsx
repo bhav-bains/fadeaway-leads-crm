@@ -1,5 +1,6 @@
-import { signInWithOAuth } from '@/app/auth/actions'
+import { signInWithOAuth, signInWithEmail } from '@/app/auth/actions'
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default async function LoginPage({
@@ -51,29 +52,28 @@ export default async function LoginPage({
                         </Button>
                     </form>
 
-                    <form action={signInWithOAuth}>
-                        <input type="hidden" name="provider" value="azure" />
-                        <Button variant="outline" className="w-full" type="submit">
-                            <svg className="mr-2 h-4 w-4" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
-                                <rect x="1" y="1" width="9" height="9" fill="#f25022" />
-                                <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
-                                <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
-                                <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
-                            </svg>
-                            Continue with Microsoft
-                        </Button>
+                    <div className="relative my-4">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-background px-2 text-muted-foreground">Or continue with email</span>
+                        </div>
+                    </div>
+
+                    <form action={signInWithEmail} className="space-y-3">
+                        <div className="space-y-1">
+                            <Input name="email" type="email" placeholder="Email address" required className="bg-background" />
+                        </div>
+                        <div className="space-y-1">
+                            <Input name="password" type="password" placeholder="Password" required className="bg-background" />
+                        </div>
+                        <Button className="w-full" type="submit">Sign In</Button>
                     </form>
 
-                    <form action={signInWithOAuth}>
-                        <input type="hidden" name="provider" value="apple" />
-                        <Button variant="outline" className="w-full" type="submit">
-                            <svg className="mr-2 h-4 w-4 text-black dark:text-white" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M16.365 21.056c-.053-.016-.108-.029-.163-.042A9.953 9.953 0 0112 22a9.953 9.953 0 01-4.202-.938c-.055.013-.11.026-.163.042C3.155 18.525 0 14.162 0 9 0 4.029 4.029 0 9 0s9 4.029 9 9c0 5.162-3.155 9.525-7.635 12.056z" fill="none" />
-                                <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z" />
-                            </svg>
-                            Continue with Apple
-                        </Button>
-                    </form>
+                    <div className="mt-4 text-center text-sm text-muted-foreground">
+                        Don't have an account? <a href="/signup" className="text-primary hover:underline">Sign up</a>
+                    </div>
                 </CardContent>
             </Card>
         </div>
