@@ -52,24 +52,7 @@ export default async function LoginPage({
                         </Button>
                     </form>
 
-                    <div className="relative my-4">
-                        <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-background px-2 text-muted-foreground">Or continue with email</span>
-                        </div>
-                    </div>
 
-                    <form action={signInWithEmail} className="space-y-3">
-                        <div className="space-y-1">
-                            <Input name="email" type="email" placeholder="Email address" required className="bg-background" />
-                        </div>
-                        <div className="space-y-1">
-                            <Input name="password" type="password" placeholder="Password" required className="bg-background" />
-                        </div>
-                        <Button className="w-full" type="submit">Sign In</Button>
-                    </form>
 
                     <div className="mt-4 text-center text-sm text-muted-foreground">
                         Don't have an account? <a href="/signup" className="text-primary hover:underline">Sign up</a>
