@@ -254,10 +254,10 @@ export default function LeadFinder() {
     }).sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
 
     return (
-        <div className="flex flex-col gap-6 pb-12">
+        <div className="flex flex-col gap-6 pb-12 w-full min-w-0">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight">Lead Finder (SEO Auditor)</h1>
-                <p className="text-muted-foreground mt-2">
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Lead Finder (SEO Auditor)</h1>
+                <p className="text-sm md:text-base text-muted-foreground mt-2">
                     Hunt down highly successful local businesses that have massive digital and SEO gaps.
                 </p>
             </div>
@@ -268,21 +268,21 @@ export default function LeadFinder() {
                     <CardDescription>Enter a Niche and City to scrape Google and instantly add fresh businesses into your Inbox.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4 items-end">
-                        <div className="grid gap-2 flex-1">
+                    <form onSubmit={handleSearch} className="flex flex-col lg:flex-row gap-4 items-start lg:items-end w-full min-w-0">
+                        <div className="grid gap-2 w-full lg:flex-1 min-w-0">
                             <Label htmlFor="niche" className="font-semibold text-foreground/80">Business Niche</Label>
-                            <div className="relative">
+                            <div className="relative w-full">
                                 <Building2 className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     id="niche"
                                     placeholder="e.g. Plumber, Roofing, Dentist"
-                                    className="pl-9 bg-background"
+                                    className="pl-9 bg-background w-full"
                                     value={niche}
                                     onChange={(e) => setNiche(e.target.value)}
                                 />
                             </div>
                         </div>
-                        <div className="grid gap-2 flex-1">
+                        <div className="grid gap-2 w-full lg:flex-1 min-w-0">
                             <Label htmlFor="city" className="font-semibold text-foreground/80">Target City</Label>
                             <Popover open={isCityDropdownOpen} onOpenChange={setIsCityDropdownOpen}>
                                 <PopoverTrigger render={
@@ -339,7 +339,7 @@ export default function LeadFinder() {
                                 </PopoverContent>
                             </Popover>
                         </div>
-                        <Button type="submit" disabled={isSearching || isLoadingInitial} className="w-full md:w-auto font-medium px-8">
+                        <Button type="submit" disabled={isSearching || isLoadingInitial} className="w-full lg:w-auto font-medium px-8 shrink-0">
                             {isSearching ? (
                                 <>
                                     <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -370,10 +370,10 @@ export default function LeadFinder() {
                     </div>
 
                     {/* Filters Bar */}
-                    <Card>
-                        <CardContent className="p-4 flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-6 bg-slate-50 border-b">
-                            <div className="flex flex-col gap-2 w-full sm:w-auto sm:min-w-[200px]">
-                                <div className="flex justify-between">
+                    <Card className="min-w-0 w-full overflow-hidden">
+                        <CardContent className="p-4 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-6 bg-slate-50 border-b min-w-0 w-full">
+                            <div className="flex flex-col gap-2 w-full sm:flex-1 min-w-[200px]">
+                                <div className="flex justify-between w-full">
                                     <Label className="text-xs font-semibold text-muted-foreground">Min SEO Score</Label>
                                     <span className="text-xs font-bold">{minScore[0]}/20</span>
                                 </div>
@@ -424,144 +424,146 @@ export default function LeadFinder() {
                     )}
 
                     {/* Dense Data Table */}
-                    <div className="rounded-md border bg-card">
-                        <Table>
-                            <TableHeader className="bg-muted/50">
-                                <TableRow>
-                                    <TableHead className="w-[50px]">
-                                        <Checkbox
-                                            checked={selectedIds.size === filteredResults.length && filteredResults.length > 0}
-                                            onCheckedChange={handleSelectAll}
-                                        />
-                                    </TableHead>
-                                    <TableHead className="w-[280px]">Business & City</TableHead>
-                                    <TableHead>Rating</TableHead>
-                                    <TableHead>Scraped Email</TableHead>
-                                    <TableHead className="text-center">Booking Link</TableHead>
-                                    <TableHead className="text-right">Audit Score</TableHead>
-                                    <TableHead className="w-[80px]"></TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredResults.length === 0 ? (
+                    <div className="rounded-md border bg-card w-full min-w-0 overflow-hidden">
+                        <div className="overflow-x-auto w-full max-w-full">
+                            <Table className="min-w-[800px] w-full">
+                                <TableHeader className="bg-muted/50">
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                            No leads match the current filters.
-                                        </TableCell>
+                                        <TableHead className="w-[50px]">
+                                            <Checkbox
+                                                checked={selectedIds.size === filteredResults.length && filteredResults.length > 0}
+                                                onCheckedChange={handleSelectAll}
+                                            />
+                                        </TableHead>
+                                        <TableHead className="w-[280px]">Business & City</TableHead>
+                                        <TableHead>Rating</TableHead>
+                                        <TableHead>Scraped Email</TableHead>
+                                        <TableHead className="text-center">Booking Link</TableHead>
+                                        <TableHead className="text-right">Audit Score</TableHead>
+                                        <TableHead className="w-[80px]"></TableHead>
                                     </TableRow>
-                                ) : (
-                                    Object.entries(
-                                        filteredResults.reduce((acc, result: any) => {
-                                            const key = `${result.niche || 'Other'} in ${result.city || 'Unknown City'}`;
-                                            if (!acc[key]) acc[key] = [];
-                                            acc[key].push(result);
-                                            return acc;
-                                        }, {} as Record<string, Record<string, any>[]>)
-                                    ).map(([groupName, groupLeads]) => (
-                                        <Fragment key={groupName}>
-                                            <TableRow className="bg-slate-100/50 hover:bg-slate-100/50">
-                                                <TableCell colSpan={7} className="py-2.5 font-semibold text-sm text-foreground/80 border-b-2">
-                                                    {groupName} <span className="text-xs font-normal text-muted-foreground ml-2">({groupLeads.length} leads)</span>
-                                                </TableCell>
-                                            </TableRow>
-                                            {groupLeads.map((result: any) => {
-                                                const auditData = auditedLeads[result.id];
-                                                const isAuditingRow = isAuditing[result.id];
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredResults.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                                No leads match the current filters.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        Object.entries(
+                                            filteredResults.reduce((acc, result: any) => {
+                                                const key = `${result.niche || 'Other'} in ${result.city || 'Unknown City'}`;
+                                                if (!acc[key]) acc[key] = [];
+                                                acc[key].push(result);
+                                                return acc;
+                                            }, {} as Record<string, Record<string, any>[]>)
+                                        ).map(([groupName, groupLeads]) => (
+                                            <Fragment key={groupName}>
+                                                <TableRow className="bg-slate-100/50 hover:bg-slate-100/50">
+                                                    <TableCell colSpan={7} className="py-2.5 font-semibold text-sm text-foreground/80 border-b-2">
+                                                        {groupName} <span className="text-xs font-normal text-muted-foreground ml-2">({groupLeads.length} leads)</span>
+                                                    </TableCell>
+                                                </TableRow>
+                                                {groupLeads.map((result: any) => {
+                                                    const auditData = auditedLeads[result.id];
+                                                    const isAuditingRow = isAuditing[result.id];
 
-                                                return (
-                                                    <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
-                                                        <TableCell className="w-[50px]">
-                                                            <Checkbox
-                                                                checked={selectedIds.has(result.id)}
-                                                                onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
-                                                            />
-                                                        </TableCell>
-                                                        <TableCell className="font-medium">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="truncate font-semibold text-base max-w-[200px]" title={result.name}>{result.name}</div>
-                                                                {result.website ? (
-                                                                    <a href={result.website.startsWith('http') ? result.website : `https://${result.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors" title="Visit Website">
-                                                                        <ExternalLink className="h-3.5 w-3.5" />
-                                                                    </a>
+                                                    return (
+                                                        <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
+                                                            <TableCell className="w-[50px]">
+                                                                <Checkbox
+                                                                    checked={selectedIds.has(result.id)}
+                                                                    onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell className="font-medium">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="truncate font-semibold text-base max-w-[200px]" title={result.name}>{result.name}</div>
+                                                                    {result.website ? (
+                                                                        <a href={result.website.startsWith('http') ? result.website : `https://${result.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors" title="Visit Website">
+                                                                            <ExternalLink className="h-3.5 w-3.5" />
+                                                                        </a>
+                                                                    ) : (
+                                                                        <Badge variant="destructive" className="h-[18px] text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold">No Website</Badge>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px]" title={auditData?.biggestWeakness}>{auditData?.biggestWeakness || 'Not audited yet'}</div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <div className="flex items-center gap-1 text-sm font-medium">
+                                                                    ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                {!auditData ? (
+                                                                    <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
+                                                                ) : auditData.email ? (
+                                                                    <span className="text-sm font-medium truncate max-w-[150px] inline-block" title={auditData.email}>{auditData.email}</span>
                                                                 ) : (
-                                                                    <Badge variant="destructive" className="h-[18px] text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold">No Website</Badge>
+                                                                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Not Found</span>
                                                                 )}
-                                                            </div>
-                                                            <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px]" title={auditData?.biggestWeakness}>{auditData?.biggestWeakness || 'Not audited yet'}</div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            <div className="flex items-center gap-1 text-sm font-medium">
-                                                                ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {!auditData ? (
-                                                                <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
-                                                            ) : auditData.email ? (
-                                                                <span className="text-sm font-medium truncate max-w-[150px] inline-block" title={auditData.email}>{auditData.email}</span>
-                                                            ) : (
-                                                                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Not Found</span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-center">
-                                                            {!auditData ? (
-                                                                <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
-                                                            ) : auditData.bookingDetected ? (
-                                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Yes</Badge>
-                                                            ) : (
-                                                                <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Missing</Badge>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            {!auditData ? (
-                                                                <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
-                                                            ) : (
-                                                                <Badge variant={auditData.score >= 12 ? 'default' : (auditData.score >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold text-xs">
-                                                                    {auditData.score}/20
-                                                                </Badge>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="w-[80px]">
-                                                            <div className="flex items-center gap-1">
-                                                                {!auditData && (
+                                                            </TableCell>
+                                                            <TableCell className="text-center">
+                                                                {!auditData ? (
+                                                                    <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
+                                                                ) : auditData.bookingDetected ? (
+                                                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Yes</Badge>
+                                                                ) : (
+                                                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Missing</Badge>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right">
+                                                                {!auditData ? (
+                                                                    <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
+                                                                ) : (
+                                                                    <Badge variant={auditData.score >= 12 ? 'default' : (auditData.score >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold text-xs">
+                                                                        {auditData.score}/20
+                                                                    </Badge>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="w-[80px]">
+                                                                <div className="flex items-center gap-1">
+                                                                    {!auditData && (
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            className="h-8 w-8 p-0"
+                                                                            onClick={() => handleRunAudit(result)}
+                                                                            disabled={isAuditingRow}
+                                                                            title="Run Audit & Enrich"
+                                                                        >
+                                                                            {isAuditingRow ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 text-primary" />}
+                                                                            <span className="sr-only">Run Audit & Enrich</span>
+                                                                        </Button>
+                                                                    )}
                                                                     <Button
                                                                         size="sm"
                                                                         variant="ghost"
                                                                         className="h-8 w-8 p-0"
-                                                                        onClick={() => handleRunAudit(result)}
-                                                                        disabled={isAuditingRow}
-                                                                        title="Run Audit & Enrich"
+                                                                        onClick={() => {
+                                                                            const newSet = new Set([result.id]);
+                                                                            setSelectedIds(newSet);
+                                                                            setTimeout(() => {
+                                                                                document.getElementById('bulk-assign-btn')?.click();
+                                                                            }, 50);
+                                                                        }}
+                                                                        disabled={leads.some(l => l.name === result.name)}
+                                                                        title="Save to Pipeline"
                                                                     >
-                                                                        {isAuditingRow ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 text-primary" />}
-                                                                        <span className="sr-only">Run Audit & Enrich</span>
+                                                                        <Send className="h-4 w-4 text-primary" />
                                                                     </Button>
-                                                                )}
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    className="h-8 w-8 p-0"
-                                                                    onClick={() => {
-                                                                        const newSet = new Set([result.id]);
-                                                                        setSelectedIds(newSet);
-                                                                        setTimeout(() => {
-                                                                            document.getElementById('bulk-assign-btn')?.click();
-                                                                        }, 50);
-                                                                    }}
-                                                                    disabled={leads.some(l => l.name === result.name)}
-                                                                    title="Save to Pipeline"
-                                                                >
-                                                                    <Send className="h-4 w-4 text-primary" />
-                                                                </Button>
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            })}
-                                        </Fragment>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )
+                                                })}
+                                            </Fragment>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </div>
                 </div>
             )}
