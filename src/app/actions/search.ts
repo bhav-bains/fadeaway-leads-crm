@@ -21,7 +21,7 @@ export async function searchGooglePlaces(niche: string, city: string) {
         .eq('workspace_id', profile.workspace_id)
         .eq('query', queryStr)
         .eq('status', 'done')
-        .order('created_at', { ascending: false })
+        .order('started_at', { ascending: false, nullsFirst: false })
         .limit(1)
         .single();
 
@@ -92,6 +92,7 @@ export async function searchGooglePlaces(niche: string, city: string) {
         query: queryStr,
         city: city.toLowerCase(),
         status: 'done',
+        started_at: new Date().toISOString(),
         totals_json: { results: cleanData }
     }]);
 
@@ -140,4 +141,49 @@ export async function getCityAutocomplete(input: string) {
         console.error("Autocomplete error:", error);
         return { error: 'Failed to fetch suggestions' };
     }
+}
+
+export async function getAllSourcedLeads() {
+    const supabase = await createClient();
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return { error: 'Not authenticated' };
+
+    const { data: profile } = await supabase.from('profiles').select('workspace_id').eq('id', user.id).single();
+    if (!profile || !profile.workspace_id) return { error: 'No workspace found for user' };
+
+    const { data: runs, error } = await supabase
+        .from('runs')
+        .select('totals_json, city, query')
+        .eq('workspace_id', profile.workspace_id)
+        .eq('status', 'done')
+        .order('started_at', { ascending: false, nullsFirst: false });
+
+    if (error && error.code !== 'PGRST116') {
+        console.error("Error fetching all sourced leads:", error);
+        return { error: 'Failed to fetch historical searches' };
+    }
+
+    if (!runs || runs.length === 0) {
+        return { data: [] };
+    }
+
+    // Aggregate all historical results
+    const masterList: Record<string, any>[] = [];
+    const seenIds = new Set<string>();
+
+    // Since we ordered descending, newer runs come first.
+    // If a business was updated in a newer run, we keep the newer version.
+    for (const run of runs) {
+        if (run.totals_json?.results && Array.isArray(run.totals_json.results)) {
+            for (const business of run.totals_json.results) {
+                if (business && business.id && !seenIds.has(business.id)) {
+                    seenIds.add(business.id);
+                    masterList.push(business);
+                }
+            }
+        }
+    }
+
+    return { data: masterList };
 }

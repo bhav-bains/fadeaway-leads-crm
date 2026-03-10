@@ -17,10 +17,14 @@ export async function signInWithOAuth(formData: FormData) {
     const isDev = process.env.NODE_ENV === 'development' || host.includes('localhost')
     const origin = isDev ? `${protocol}://${host}` : (process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`)
 
+    const redirectTarget = `${origin}/api/auth/callback`
+    console.log("[Auth Action] Detected Host:", host)
+    console.log("[Auth Action] Generated Redirect Target:", redirectTarget)
+
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-            redirectTo: `${origin}/api/auth/callback`,
+            redirectTo: redirectTarget,
         },
     })
 

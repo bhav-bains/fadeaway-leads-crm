@@ -24,31 +24,108 @@ export async function insertLead(leadData: { name: string, address: string, city
         return { error: 'No workspace found for user' }
     }
 
-    // 3. Insert into companies (Replaces old 'leads' table)
-    const { data: company, error: companyError } = await supabase
-        .from('companies')
-        .insert([{
-            workspace_id: profile.workspace_id,
-            name: leadData.name,
-            address: leadData.address,
-            city: leadData.city,
-            phone: leadData.phone,
-            website: leadData.website,
-            status: 'New'
-        }])
-        .select()
-        .single();
+    // --- NORMALIZATION (THE BOUNCER) --- //
+
+    // 1. Normalize Domain (strip protocols, www, and trailing slashes)
+    let normalizedWebsite = leadData.website?.toLowerCase().trim();
+    if (normalizedWebsite) {
+        normalizedWebsite = normalizedWebsite.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+    }
+
+    // 2. Normalize Phone (strip to just digits and plus signs for E.164-lite matching)
+    let normalizedPhone = leadData.phone?.trim();
+    if (normalizedPhone) {
+        normalizedPhone = normalizedPhone.replace(/[^\d+]/g, '');
+    }
+
+    // 3. Search for Existing Match (Deduplication)
+    let existingCompany = null;
+
+    if (normalizedWebsite || normalizedPhone) {
+        // Build OR query dynamically
+        let matchQuery = '';
+        if (normalizedWebsite && normalizedPhone) {
+            matchQuery = `website.ilike.%${normalizedWebsite}%,phone.ilike.%${normalizedPhone}%`;
+        } else if (normalizedWebsite) {
+            matchQuery = `website.ilike.%${normalizedWebsite}%`;
+        } else if (normalizedPhone) {
+            matchQuery = `phone.ilike.%${normalizedPhone}%`;
+        }
+
+        const { data: matches, error: matchError } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('workspace_id', profile.workspace_id)
+            .or(matchQuery)
+            .limit(1);
+
+        if (!matchError && matches && matches.length > 0) {
+            existingCompany = matches[0];
+            console.log(`[Deduplication] Blocked insertion. Found existing match for ${leadData.name} via Domain/Phone.`);
+        }
+    }
+
+    // 4. Insert or Upsert into companies
+    let company;
+    let companyError;
+
+    if (existingCompany) {
+        // Upsert Scenario: Only update fresh scraped data, never ruin their pipeline status
+        const { data: updatedCompany, error: upError } = await supabase
+            .from('companies')
+            .update({
+                name: leadData.name, // Refresh name
+                address: leadData.address,
+                city: leadData.city,
+                phone: leadData.phone || existingCompany.phone,
+                website: leadData.website || existingCompany.website,
+                // Do NOT touch 'status' or 'created_at' to preserve pipeline integrity
+            })
+            .eq('id', existingCompany.id)
+            .select()
+            .single();
+
+        company = updatedCompany;
+        companyError = upError;
+    } else {
+        // Clean Insert Scenario
+        const { data: newCompany, error: inError } = await supabase
+            .from('companies')
+            .insert([{
+                workspace_id: profile.workspace_id,
+                name: leadData.name,
+                address: leadData.address,
+                city: leadData.city,
+                phone: leadData.phone,
+                website: leadData.website,
+                status: 'New'
+            }])
+            .select()
+            .single();
+
+        company = newCompany;
+        companyError = inError;
+    }
 
     if (companyError || !company) {
-        console.error("Error inserting company:", companyError)
-        return { error: companyError?.message || "Failed to create company" }
+        console.error("Error saving company:", companyError)
+        return { error: companyError?.message || "Failed to save company" }
     }
 
     const companyId = company.id;
 
-    // 4. Save the SEO Audit Scraper Results (if provided)
+    // 5. Save or Update SEO Audit Results
     if (scrapeResult) {
-        // Insert SEO Audits
+        // Wipe existing child rows cleanly rather than crafting complex merging logic per table
+        // This simulates a fresh "Upsert" of the audit data every time we re-scrape.
+        if (existingCompany) {
+            await supabase.from('seo_audits').delete().eq('company_id', companyId);
+            await supabase.from('scores').delete().eq('company_id', companyId);
+            await supabase.from('contacts').delete().eq('company_id', companyId);
+            await supabase.from('socials').delete().eq('company_id', companyId);
+        }
+
+        // Insert fresh SEO Audits
         await supabase.from('seo_audits').insert([{
             company_id: companyId,
             has_title: scrapeResult.seoAudit?.has_title || false,
@@ -58,7 +135,7 @@ export async function insertLead(leadData: { name: string, address: string, city
             schema_org_types: scrapeResult.seoAudit?.has_schema ? ['Found'] : []
         }]);
 
-        // Insert Scores
+        // Insert fresh Scores
         await supabase.from('scores').insert([{
             company_id: companyId,
             score_overall: scrapeResult.totalScore || 0,
@@ -68,7 +145,7 @@ export async function insertLead(leadData: { name: string, address: string, city
             score_fit: scrapeResult.fitScore || 0
         }]);
 
-        // Insert Contacts
+        // Insert fresh Contacts
         if (scrapeResult.emails && scrapeResult.emails.length > 0) {
             const contactInserts = scrapeResult.emails.map((e: Record<string, any>) => ({
                 company_id: companyId,
@@ -79,7 +156,7 @@ export async function insertLead(leadData: { name: string, address: string, city
             await supabase.from('contacts').insert(contactInserts);
         }
 
-        // Insert Socials
+        // Insert fresh Socials
         if (scrapeResult.socials && scrapeResult.socials.length > 0) {
             const socialInserts = scrapeResult.socials.map((s: Record<string, any>) => ({
                 company_id: companyId,
@@ -88,8 +165,8 @@ export async function insertLead(leadData: { name: string, address: string, city
             }));
             await supabase.from('socials').insert(socialInserts);
         }
-    } else {
-        // Fallback empty scores if no website or no audit performed
+    } else if (!existingCompany) {
+        // Fallback empty scores only if this is a brand new company with no website
         await supabase.from('scores').insert([{
             company_id: companyId,
             score_overall: 0,

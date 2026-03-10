@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
-import { Search, MapPin, Building2, Download, Send, AlertCircle } from "lucide-react";
+import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,7 +18,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { insertLead, runLocalSeoAudit } from "@/app/actions/leads";
-import { searchGooglePlaces, getCityAutocomplete } from "@/app/actions/search";
+import { searchGooglePlaces, getCityAutocomplete, getAllSourcedLeads } from "@/app/actions/search";
+import { useEffect, Fragment } from "react";
 
 export default function LeadFinder() {
     const [niche, setNiche] = useState("");
@@ -40,6 +41,26 @@ export default function LeadFinder() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [auditedLeads, setAuditedLeads] = useState<Record<string, any>>({});
     const [isAuditing, setIsAuditing] = useState<Record<string, boolean>>({});
+
+    // Initial State Hydration
+    const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+
+    useEffect(() => {
+        const fetchInitialState = async () => {
+            setIsLoadingInitial(true);
+            const { data } = await getAllSourcedLeads();
+
+            if (data && data.length > 0) {
+                setResults(data);
+
+                // Set default display values if available
+                if (data[0]?.city) setCity(data[0].city);
+                if (data[0]?.niche) setNiche(data[0].niche);
+            }
+            setIsLoadingInitial(false);
+        };
+        fetchInitialState();
+    }, []);
 
     // Fetch City Suggestions
     const handleCitySearch = async (term: string) => {
@@ -71,16 +92,20 @@ export default function LeadFinder() {
 
         if (error) {
             toast.error(error);
-            setResults([]);
         } else if (data) {
-            // Reset state for new search
-            setResults(data);
+            // Append new results to master list, removing duplicates
+            setResults(prev => {
+                const combined = [...data, ...prev];
+                const seen = new Set();
+                return combined.filter(item => {
+                    const isDuplicate = seen.has(item.id);
+                    seen.add(item.id);
+                    return !isDuplicate;
+                });
+            });
             setSelectedIds(new Set());
-            setAuditedLeads({});
-            setIsAuditing({});
             setMinScore([0]); // Reset score filter to see new results
-            setRequireEmail(false);
-            toast.success(`Found ${data.length} businesses. Select leads to run SEO Audit.`);
+            toast.success(`Found ${data.length} businesses. Master list updated.`);
         }
         setIsSearching(false);
     };
@@ -226,7 +251,7 @@ export default function LeadFinder() {
         if (ratingFilter === "high" && r.rating < 4.0) return false;
         if (ratingFilter === "low" && r.rating >= 4.0) return false;
         return true;
-    });
+    }).sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
 
     return (
         <div className="flex flex-col gap-6 pb-12">
@@ -239,8 +264,8 @@ export default function LeadFinder() {
 
             <Card className="border-primary/10 bg-primary/5">
                 <CardHeader className="pb-4">
-                    <CardTitle>Engine Parameters</CardTitle>
-                    <CardDescription>Enter your target ICP and let the Cheerio scraper audit them behind the scenes.</CardDescription>
+                    <CardTitle>Sourced Leads Engine</CardTitle>
+                    <CardDescription>Enter a Niche and City to scrape Google and instantly add fresh businesses into your Inbox.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4 items-end">
@@ -260,7 +285,7 @@ export default function LeadFinder() {
                         <div className="grid gap-2 flex-1">
                             <Label htmlFor="city" className="font-semibold text-foreground/80">Target City</Label>
                             <Popover open={isCityDropdownOpen} onOpenChange={setIsCityDropdownOpen}>
-                                <PopoverTrigger asChild>
+                                <PopoverTrigger render={
                                     <Button
                                         variant="outline"
                                         role="combobox"
@@ -276,7 +301,7 @@ export default function LeadFinder() {
                                         </div>
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
-                                </PopoverTrigger>
+                                } />
                                 <PopoverContent className="w-[300px] p-0" align="start">
                                     <Command shouldFilter={false}>
                                         <CommandInput
@@ -314,16 +339,21 @@ export default function LeadFinder() {
                                 </PopoverContent>
                             </Popover>
                         </div>
-                        <Button type="submit" disabled={isSearching} className="w-full md:w-auto font-medium px-8">
+                        <Button type="submit" disabled={isSearching || isLoadingInitial} className="w-full md:w-auto font-medium px-8">
                             {isSearching ? (
                                 <>
                                     <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
                                     Scraping...
                                 </>
+                            ) : isLoadingInitial ? (
+                                <>
+                                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                    Loading...
+                                </>
                             ) : (
                                 <>
                                     <Search className="h-4 w-4 mr-2" />
-                                    Run Audit Scan
+                                    Run Fast Search
                                 </>
                             )}
                         </Button>
@@ -333,6 +363,11 @@ export default function LeadFinder() {
 
             {results.length > 0 && (
                 <div className="space-y-4 animate-in fade-in duration-500">
+                    <div className="flex items-center justify-between px-1">
+                        <h3 className="text-lg font-medium text-foreground/80">
+                            Inbox contains <span className="font-bold text-foreground">{filteredResults.length}</span> Master Leads
+                        </h3>
+                    </div>
 
                     {/* Filters Bar */}
                     <Card>
@@ -415,89 +450,115 @@ export default function LeadFinder() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    filteredResults.map((result) => {
-                                        const auditData = auditedLeads[result.id];
-                                        const isAuditingRow = isAuditing[result.id];
-
-                                        return (
-                                            <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
-                                                <TableCell>
-                                                    <Checkbox
-                                                        checked={selectedIds.has(result.id)}
-                                                        onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="font-medium">
-                                                    <div className="truncate" title={result.name}>{result.name}</div>
-                                                    <div className="text-xs text-muted-foreground mt-0.5 truncate">{result.city} {auditData?.biggestWeakness ? `| ${auditData.biggestWeakness}` : ''}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1 text-sm font-medium">
-                                                        ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {!auditData ? (
-                                                        <span className="text-xs text-muted-foreground">-</span>
-                                                    ) : auditData.email ? (
-                                                        <span className="text-sm font-medium">{auditData.email}</span>
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Not Found</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    {!auditData ? (
-                                                        <span className="text-xs text-muted-foreground">-</span>
-                                                    ) : auditData.bookingDetected ? (
-                                                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Yes</Badge>
-                                                    ) : (
-                                                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Missing</Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {!auditData ? (
-                                                        <span className="text-xs text-muted-foreground">-</span>
-                                                    ) : (
-                                                        <Badge variant={auditData.score >= 12 ? 'default' : (auditData.score >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold text-xs">
-                                                            {auditData.score}/20
-                                                        </Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
-                                                        {!auditData && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="ghost"
-                                                                className="h-8 w-8 p-0"
-                                                                onClick={() => handleRunAudit(result)}
-                                                                disabled={isAuditingRow}
-                                                                title="Run SEO Audit"
-                                                            >
-                                                                {isAuditingRow ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 text-blue-500" />}
-                                                            </Button>
-                                                        )}
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className="h-8 w-8 p-0"
-                                                            onClick={() => {
-                                                                const newSet = new Set([result.id]);
-                                                                setSelectedIds(newSet);
-                                                                setTimeout(() => {
-                                                                    document.getElementById('bulk-assign-btn')?.click();
-                                                                }, 50);
-                                                            }}
-                                                            disabled={leads.some(l => l.name === result.name)}
-                                                            title="Save to Pipeline"
-                                                        >
-                                                            <Send className="h-4 w-4 text-primary" />
-                                                        </Button>
-                                                    </div>
+                                    Object.entries(
+                                        filteredResults.reduce((acc, result: any) => {
+                                            const key = `${result.niche || 'Other'} in ${result.city || 'Unknown City'}`;
+                                            if (!acc[key]) acc[key] = [];
+                                            acc[key].push(result);
+                                            return acc;
+                                        }, {} as Record<string, Record<string, any>[]>)
+                                    ).map(([groupName, groupLeads]) => (
+                                        <Fragment key={groupName}>
+                                            <TableRow className="bg-slate-100/50 hover:bg-slate-100/50">
+                                                <TableCell colSpan={7} className="py-2.5 font-semibold text-sm text-foreground/80 border-b-2">
+                                                    {groupName} <span className="text-xs font-normal text-muted-foreground ml-2">({groupLeads.length} leads)</span>
                                                 </TableCell>
                                             </TableRow>
-                                        )
-                                    })
+                                            {groupLeads.map((result: any) => {
+                                                const auditData = auditedLeads[result.id];
+                                                const isAuditingRow = isAuditing[result.id];
+
+                                                return (
+                                                    <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
+                                                        <TableCell className="w-[50px]">
+                                                            <Checkbox
+                                                                checked={selectedIds.has(result.id)}
+                                                                onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell className="font-medium">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="truncate font-semibold text-base max-w-[200px]" title={result.name}>{result.name}</div>
+                                                                {result.website ? (
+                                                                    <a href={result.website.startsWith('http') ? result.website : `https://${result.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors" title="Visit Website">
+                                                                        <ExternalLink className="h-3.5 w-3.5" />
+                                                                    </a>
+                                                                ) : (
+                                                                    <Badge variant="destructive" className="h-[18px] text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold">No Website</Badge>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px]" title={auditData?.biggestWeakness}>{auditData?.biggestWeakness || 'Not audited yet'}</div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-1 text-sm font-medium">
+                                                                ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {!auditData ? (
+                                                                <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
+                                                            ) : auditData.email ? (
+                                                                <span className="text-sm font-medium truncate max-w-[150px] inline-block" title={auditData.email}>{auditData.email}</span>
+                                                            ) : (
+                                                                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Not Found</span>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-center">
+                                                            {!auditData ? (
+                                                                <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
+                                                            ) : auditData.bookingDetected ? (
+                                                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Yes</Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Missing</Badge>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {!auditData ? (
+                                                                <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
+                                                            ) : (
+                                                                <Badge variant={auditData.score >= 12 ? 'default' : (auditData.score >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold text-xs">
+                                                                    {auditData.score}/20
+                                                                </Badge>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="w-[80px]">
+                                                            <div className="flex items-center gap-1">
+                                                                {!auditData && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        className="h-8 w-8 p-0"
+                                                                        onClick={() => handleRunAudit(result)}
+                                                                        disabled={isAuditingRow}
+                                                                        title="Run Audit & Enrich"
+                                                                    >
+                                                                        {isAuditingRow ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 text-primary" />}
+                                                                        <span className="sr-only">Run Audit & Enrich</span>
+                                                                    </Button>
+                                                                )}
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="h-8 w-8 p-0"
+                                                                    onClick={() => {
+                                                                        const newSet = new Set([result.id]);
+                                                                        setSelectedIds(newSet);
+                                                                        setTimeout(() => {
+                                                                            document.getElementById('bulk-assign-btn')?.click();
+                                                                        }, 50);
+                                                                    }}
+                                                                    disabled={leads.some(l => l.name === result.name)}
+                                                                    title="Save to Pipeline"
+                                                                >
+                                                                    <Send className="h-4 w-4 text-primary" />
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            })}
+                                        </Fragment>
+                                    ))
                                 )}
                             </TableBody>
                         </Table>
