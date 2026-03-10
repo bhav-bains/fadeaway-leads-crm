@@ -9,9 +9,10 @@ export async function GET(request: Request) {
     const next = searchParams.get('next') ?? '/'
 
     const headersList = await headers()
-    const host = headersList.get('host')
+    const host = headersList.get('host') || 'localhost:3000'
     const protocol = headersList.get('x-forwarded-proto') || 'http'
-    const origin = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
+    const isDev = process.env.NODE_ENV === 'development' || host.includes('localhost')
+    const origin = isDev ? `${protocol}://${host}` : (process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`)
 
     if (code) {
         console.log("OAuth callback triggered with code:", code.substring(0, 5) + "...");
