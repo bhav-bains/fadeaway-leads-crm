@@ -13,12 +13,21 @@ import { Slider } from "@/components/ui/slider";
 import { Search, MapPin, Building2, Download, Send, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { insertLead, runLocalSeoAudit } from "@/app/actions/leads";
-import { searchGooglePlaces } from "@/app/actions/search";
+import { searchGooglePlaces, getCityAutocomplete } from "@/app/actions/search";
 
 export default function LeadFinder() {
     const [niche, setNiche] = useState("");
     const [city, setCity] = useState("");
+    const [citySearchTerm, setCitySearchTerm] = useState("");
+    const [citySuggestions, setCitySuggestions] = useState<{ id: string, description: string }[]>([]);
+    const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
+    const [isSearchingCity, setIsSearchingCity] = useState(false);
+
     const [isSearching, setIsSearching] = useState(false);
     const [results, setResults] = useState<Record<string, any>[]>([]);
 
@@ -31,6 +40,20 @@ export default function LeadFinder() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [auditedLeads, setAuditedLeads] = useState<Record<string, any>>({});
     const [isAuditing, setIsAuditing] = useState<Record<string, boolean>>({});
+
+    // Fetch City Suggestions
+    const handleCitySearch = async (term: string) => {
+        setCitySearchTerm(term);
+        if (term.length < 2) {
+            setCitySuggestions([]);
+            return;
+        }
+
+        setIsSearchingCity(true);
+        const { data } = await getCityAutocomplete(term);
+        if (data) setCitySuggestions(data);
+        setIsSearchingCity(false);
+    };
 
     const { leads, addLead } = useLeadStore();
 
@@ -236,16 +259,60 @@ export default function LeadFinder() {
                         </div>
                         <div className="grid gap-2 flex-1">
                             <Label htmlFor="city" className="font-semibold text-foreground/80">Target City</Label>
-                            <div className="relative">
-                                <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    id="city"
-                                    placeholder="e.g. Seattle, Toronto, Austin"
-                                    className="pl-9 bg-background"
-                                    value={city}
-                                    onChange={(e) => setCity(e.target.value)}
-                                />
-                            </div>
+                            <Popover open={isCityDropdownOpen} onOpenChange={setIsCityDropdownOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={isCityDropdownOpen}
+                                        className={cn(
+                                            "w-full justify-between pl-3 font-normal bg-background",
+                                            !city && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <div className="flex items-center truncate">
+                                            <MapPin className="h-4 w-4 mr-2 text-muted-foreground shrink-0" />
+                                            <span className="truncate">{city || "e.g. Seattle, Toronto..."}</span>
+                                        </div>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0" align="start">
+                                    <Command shouldFilter={false}>
+                                        <CommandInput
+                                            placeholder="Search a city..."
+                                            value={citySearchTerm}
+                                            onValueChange={handleCitySearch}
+                                        />
+                                        <CommandList>
+                                            <CommandEmpty>
+                                                {isSearchingCity ? "Searching Maps..." : "No city found."}
+                                            </CommandEmpty>
+                                            <CommandGroup>
+                                                {citySuggestions.map((suggestion) => (
+                                                    <CommandItem
+                                                        key={suggestion.id}
+                                                        value={suggestion.description}
+                                                        onSelect={(currentValue) => {
+                                                            setCity(suggestion.description);
+                                                            setCitySearchTerm(suggestion.description);
+                                                            setIsCityDropdownOpen(false);
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4 shrink-0",
+                                                                city === suggestion.description ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {suggestion.description}
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                         <Button type="submit" disabled={isSearching} className="w-full md:w-auto font-medium px-8">
                             {isSearching ? (

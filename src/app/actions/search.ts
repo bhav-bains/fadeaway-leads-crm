@@ -97,3 +97,47 @@ export async function searchGooglePlaces(niche: string, city: string) {
 
     return { data: cleanData };
 }
+
+export async function getCityAutocomplete(input: string) {
+    if (!input || input.length < 2) return { data: [] };
+
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (!apiKey) {
+        // Return mock data if no key is present for testing
+        return {
+            data: [
+                { id: "1", description: "Vancouver, BC, Canada" },
+                { id: "2", description: "Vancouver, WA, USA" }
+            ].filter(d => d.description.toLowerCase().includes(input.toLowerCase()))
+        };
+    }
+
+    try {
+        const response = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Goog-Api-Key': apiKey,
+            },
+            body: JSON.stringify({
+                input: input,
+                includedPrimaryTypes: ["locality", "administrative_area_level_3"],
+            })
+        });
+
+        if (!response.ok) {
+            return { error: 'Failed to fetch autocomplete suggestions' };
+        }
+
+        const data = await response.json();
+        const suggestions = (data.suggestions || []).map((s: any) => ({
+            id: s.placePrediction.placeId,
+            description: s.placePrediction.text.text,
+        }));
+
+        return { data: suggestions };
+    } catch (error: any) {
+        console.error("Autocomplete error:", error);
+        return { error: 'Failed to fetch suggestions' };
+    }
+}
