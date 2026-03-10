@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { Provider } from '@supabase/supabase-js'
 
@@ -9,8 +10,11 @@ export async function signInWithOAuth(formData: FormData) {
     const provider = formData.get('provider') as Provider
     const supabase = await createClient()
 
-    // Build the redirect URL pointing to our callback route
-    const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    // Build the redirect URL pointing to our callback route dynamically
+    const headersList = await headers()
+    const host = headersList.get('host')
+    const protocol = headersList.get('x-forwarded-proto') || 'http'
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
 
     const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
