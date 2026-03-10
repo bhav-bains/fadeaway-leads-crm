@@ -20,7 +20,7 @@ export default function LeadFinder() {
     const [niche, setNiche] = useState("");
     const [city, setCity] = useState("");
     const [isSearching, setIsSearching] = useState(false);
-    const [results, setResults] = useState<any[]>([]);
+    const [results, setResults] = useState<Record<string, any>[]>([]);
 
     // Filters
     const [minScore, setMinScore] = useState([0]); // Default to 0 so unaudited leads show up
@@ -77,7 +77,7 @@ export default function LeadFinder() {
         setSelectedIds(newSet);
     };
 
-    const handleRunAudit = async (lead: any) => {
+    const handleRunAudit = async (lead: Record<string, any>) => {
         setIsAuditing(prev => ({ ...prev, [lead.id]: true }));
         const { data, error } = await runLocalSeoAudit(lead.website, lead.city, lead.niche, lead.ratingCount);
         setIsAuditing(prev => ({ ...prev, [lead.id]: false }));
@@ -190,22 +190,20 @@ export default function LeadFinder() {
         toast.success("CSV Exported successfully.");
     };
 
-    const filteredResults = useMemo(() => {
-        return results.filter(r => {
-            const auditData = auditedLeads[r.id];
+    const filteredResults = results.filter(r => {
+        const auditData = auditedLeads[r.id];
 
-            if (minScore[0] > 0) {
-                if (!auditData || auditData.score < minScore[0]) return false;
-            }
-            if (requireEmail) {
-                if (!auditData || !auditData.email || auditData.email.trim() === '') return false;
-            }
+        if (minScore[0] > 0) {
+            if (!auditData || auditData.score < minScore[0]) return false;
+        }
+        if (requireEmail) {
+            if (!auditData || !auditData.email || auditData.email.trim() === '') return false;
+        }
 
-            if (ratingFilter === "high" && r.rating < 4.0) return false;
-            if (ratingFilter === "low" && r.rating >= 4.0) return false;
-            return true;
-        });
-    }, [results, minScore, requireEmail, ratingFilter, auditedLeads]);
+        if (ratingFilter === "high" && r.rating < 4.0) return false;
+        if (ratingFilter === "low" && r.rating >= 4.0) return false;
+        return true;
+    });
 
     return (
         <div className="flex flex-col gap-6 pb-12">

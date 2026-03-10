@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { scrapeWebsite } from '@/lib/scraper'
 
-export async function insertLead(leadData: { name: string, address: string, city: string, phone?: string, website?: string, niche?: string, reviewCount?: number }, scrapeResult?: any) {
+export async function insertLead(leadData: { name: string, address: string, city: string, phone?: string, website?: string, niche?: string, reviewCount?: number }, scrapeResult?: Record<string, any>) {
     const supabase = await createClient()
 
     // 1. Get current authenticated user
@@ -70,7 +70,7 @@ export async function insertLead(leadData: { name: string, address: string, city
 
         // Insert Contacts
         if (scrapeResult.emails && scrapeResult.emails.length > 0) {
-            const contactInserts = scrapeResult.emails.map((e: any) => ({
+            const contactInserts = scrapeResult.emails.map((e: Record<string, any>) => ({
                 company_id: companyId,
                 email: e.email,
                 type: e.type,
@@ -81,7 +81,7 @@ export async function insertLead(leadData: { name: string, address: string, city
 
         // Insert Socials
         if (scrapeResult.socials && scrapeResult.socials.length > 0) {
-            const socialInserts = scrapeResult.socials.map((s: any) => ({
+            const socialInserts = scrapeResult.socials.map((s: Record<string, any>) => ({
                 company_id: companyId,
                 platform: s.platform,
                 url: s.url
@@ -126,8 +126,9 @@ export async function runLocalSeoAudit(website: string, city: string, niche: str
                 rawScrape: scrape
             }
         };
-    } catch (e: any) {
-        return { error: e.message || 'Failed to scrape website', score: 0, email: '', biggestWeakness: '🔴 Audit Failed', bookingDetected: false };
+    } catch (e: unknown) {
+        const error = e as Error;
+        return { error: error.message || 'Failed to scrape website', score: 0, email: '', biggestWeakness: '🔴 Audit Failed', bookingDetected: false };
     }
 }
 

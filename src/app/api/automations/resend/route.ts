@@ -60,8 +60,7 @@ export async function POST(req: Request) {
             const resendData = await res.json();
             resendId = resendData.id;
         } else {
-            console.log(`[Email Simulated] To: ${contactEmail} | Subject: ${subject}`);
-            console.log(`[Email Body]:\n${parsedBody}`);
+            console.log(`[Email Simulated] Subject: ${subject}`);
         }
 
         // 5. Save Engagement History

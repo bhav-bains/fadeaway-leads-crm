@@ -22,7 +22,7 @@ export async function POST(req: Request) {
                     .eq('email', inviteeEmail);
 
                 if (contactError || !contacts || contacts.length === 0) {
-                    console.log(`Webhook received but email ${inviteeEmail} not found in CRM.`);
+                    console.log(`Webhook received but invitee not found in CRM.`);
                     return NextResponse.json({ received: true, status: 'no_match' });
                 }
 

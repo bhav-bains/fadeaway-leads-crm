@@ -86,7 +86,7 @@ export async function scrapeWebsite(url: string, city: string, niche: string, re
     }
 
     let hasPersonal = false;
-    let hasEmail = foundEmails.size > 0;
+    const hasEmail = foundEmails.size > 0;
 
     foundEmails.forEach(email => {
         const prefix = email.split('@')[0];

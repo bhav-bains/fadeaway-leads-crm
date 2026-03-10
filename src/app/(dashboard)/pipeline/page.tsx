@@ -41,7 +41,7 @@ const TEMPLATES = {
 
 const KANBAN_STAGES = ['New', 'Contacted', 'Booked', 'Closed'];
 
-function KanbanCard({ lead }: { lead: any }) {
+function KanbanCard({ lead }: { lead: Record<string, any> }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });
     const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
 
@@ -78,17 +78,17 @@ export default function CommandDashboard() {
     const [ratingRange, setRatingRange] = useState("all");
 
     // Data State
-    const [leads, setLeads] = useState<any[]>([]);
+    const [leads, setLeads] = useState<Record<string, any>[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [pipelineLeads, setPipelineLeads] = useState<any[]>([]);
+    const [pipelineLeads, setPipelineLeads] = useState<Record<string, any>[]>([]);
 
     // Interaction State
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [activeLead, setActiveLead] = useState<any | null>(null);
+    const [activeLead, setActiveLead] = useState<Record<string, any> | null>(null);
 
     // Send Sequence Modal State
     const [isSendModalOpen, setIsSendModalOpen] = useState(false);
-    const [targetLeads, setTargetLeads] = useState<any[]>([]);
+    const [targetLeads, setTargetLeads] = useState<Record<string, any>[]>([]);
     const [selectedTemplate, setSelectedTemplate] = useState<keyof typeof TEMPLATES>("V1 (Pattern Interrupt)");
     const [emailSubject, setEmailSubject] = useState(TEMPLATES["V1 (Pattern Interrupt)"].subject);
     const [emailBody, setEmailBody] = useState(TEMPLATES["V1 (Pattern Interrupt)"].body);
@@ -112,9 +112,7 @@ export default function CommandDashboard() {
     useEffect(() => {
         const timer = setTimeout(() => { loadData(); }, 300);
         return () => clearTimeout(timer);
-    }, [loadData, search, city, currentTab]);
-
-    useEffect(() => { loadData(); }, [page, pageSize, minScore, hasEmail, ratingRange]);
+    }, [loadData, search, city, currentTab, page, pageSize, minScore, hasEmail, ratingRange]);
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) setSelectedIds(new Set(leads.map(l => l.id)));
@@ -128,7 +126,7 @@ export default function CommandDashboard() {
         setSelectedIds(newSet);
     };
 
-    const openSendSequenceModal = (singleTarget?: any) => {
+    const openSendSequenceModal = (singleTarget?: Record<string, any>) => {
         const targets = singleTarget ? [singleTarget] : leads.filter(l => selectedIds.has(l.id));
         if (targets.length === 0) return;
         setTargetLeads(targets);
@@ -203,7 +201,7 @@ export default function CommandDashboard() {
     // Dnd-Kit Hooks for Kanban
     const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
-    const handleDragEnd = async (event: any) => {
+    const handleDragEnd = async (event: { active: any, over: any }) => {
         const { active, over } = event;
         if (!over) return;
 
@@ -529,13 +527,13 @@ export default function CommandDashboard() {
                                             <h3 className="font-semibold text-sm text-blue-900">Engagement History</h3>
                                         </div>
                                         <div className="p-4 space-y-3 print-exact">
-                                            {activeLead.outreach_messages.map((msg: any, i: number) => (
+                                            {activeLead.outreach_messages.map((msg: Record<string, any>, i: number) => (
                                                 <div key={i} className="bg-white p-3 rounded border text-sm shadow-sm space-y-2">
                                                     <div className="flex justify-between items-start">
                                                         <span className="font-bold text-slate-800">{msg.sequence_name} <span className="text-xs text-muted-foreground font-normal ml-1">(Step {msg.step})</span></span>
                                                         <span className="text-[10px] text-muted-foreground">{new Date(msg.sent_at).toLocaleDateString()}</span>
                                                     </div>
-                                                    <p className="text-xs text-slate-600 line-clamp-2 italic">"{msg.subject}"</p>
+                                                    <p className="text-xs text-slate-600 line-clamp-2 italic">&quot;{msg.subject}&quot;</p>
 
                                                     <div className="flex items-center gap-3 pt-2 border-t mt-2 text-xs">
                                                         <span className={`flex items-center gap-1 ${msg.open_count > 0 ? 'text-green-600 font-medium' : 'text-slate-400'}`}><CheckCircle2 className="h-3.5 w-3.5" /> Opens: {msg.open_count}</span>
@@ -557,7 +555,7 @@ export default function CommandDashboard() {
                                             <div className="flex-1">
                                                 {activeLead.contacts?.length > 0 ? (
                                                     <div className="space-y-1">
-                                                        {activeLead.contacts.map((c: any, i: number) => (
+                                                        {activeLead.contacts.map((c: Record<string, any>, i: number) => (
                                                             <div key={i} className="flex justify-between items-center bg-slate-50 px-2 py-1.5 rounded border">
                                                                 <span className="font-medium">{c.email}</span>
                                                                 <Badge variant="outline" className="text-[10px] bg-white">{c.type}</Badge>

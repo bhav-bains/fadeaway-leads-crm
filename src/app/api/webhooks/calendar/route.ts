@@ -19,7 +19,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'No email found in webhook payload' }, { status: 400 });
         }
 
-        console.log(`[Webhook] Calendar event received for: ${email}`);
+        console.log(`[Webhook] Calendar event received`);
 
         // Find the lead matching this email
         const { data: leads, error: findError } = await supabase
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
             .limit(1);
 
         if (findError || !leads || leads.length === 0) {
-            console.log(`[Webhook] No matching lead found for email: ${email}`);
+            console.log(`[Webhook] No matching lead found for incoming event`);
             return NextResponse.json({ success: true, message: 'No matching lead found. Ignored.' });
         }
 

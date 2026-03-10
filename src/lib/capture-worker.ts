@@ -53,7 +53,7 @@ export async function startCaptureRun(
     limit: number,
     userToken: string
 ) {
-    let totals = { found: 0, enriched: 0, scored: 0, saved: 0, skipped: 0 };
+    const totals = { found: 0, enriched: 0, scored: 0, saved: 0, skipped: 0 };
 
     // Create an authenticated client acting on behalf of the user to pass RLS
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -145,7 +145,7 @@ export async function startCaptureRun(
                     .eq('workspace_id', workspaceId)
                     .eq('geohash5', geo5);
 
-                let orConditions = [];
+                const orConditions = [];
                 if (domain) orConditions.push(`domain.eq."${domain}"`);
                 if (phone) orConditions.push(`phone.eq."${phone}"`);
 
