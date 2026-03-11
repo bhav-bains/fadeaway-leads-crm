@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 
-export async function searchGooglePlaces(niche: string, city: string) {
+export async function searchGooglePlaces(niche: string, city: string, pageToken?: string) {
     const supabase = await createClient();
 
     // 1. Get Workspace ID to isolate Cache
@@ -15,18 +15,23 @@ export async function searchGooglePlaces(niche: string, city: string) {
     const queryStr = `${niche} in ${city}`.toLowerCase();
 
     // 2. Check Cache
-    const { data: existingRun } = await supabase
-        .from('runs')
-        .select('totals_json, id')
-        .eq('workspace_id', profile.workspace_id)
-        .eq('query', queryStr)
-        .eq('status', 'done')
-        .order('started_at', { ascending: false, nullsFirst: false })
-        .limit(1)
-        .single();
+    if (!pageToken) {
+        const { data: existingRun } = await supabase
+            .from('runs')
+            .select('totals_json, id')
+            .eq('workspace_id', profile.workspace_id)
+            .eq('query', queryStr)
+            .eq('status', 'done')
+            .order('started_at', { ascending: false, nullsFirst: false })
+            .limit(1)
+            .single();
 
-    if (existingRun && existingRun.totals_json?.results) {
-        return { data: existingRun.totals_json.results };
+        // Only return cached if we're not explicitly asking for a new page, and we actually have data
+        // For simplicity, we just return the full aggregated list later, but cache hit here is fine for page 1
+        if (existingRun && existingRun.totals_json?.results && existingRun.totals_json?.results.length > 0) {
+            // Note: returning cached first page won't return the token here, but `getAllSourcedLeads` handles tokens globally
+            return { data: existingRun.totals_json.results };
+        }
     }
 
     // 3. Google API Fetch
@@ -44,17 +49,22 @@ export async function searchGooglePlaces(niche: string, city: string) {
     } else {
         try {
             const query = `${niche} in ${city}`;
+            const requestBody: any = {
+                textQuery: query,
+                languageCode: 'en',
+            };
+            if (pageToken) {
+                requestBody.pageToken = pageToken;
+            }
+
             const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Goog-Api-Key': apiKey,
-                    'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount',
+                    'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,nextPageToken',
                 },
-                body: JSON.stringify({
-                    textQuery: query,
-                    languageCode: 'en',
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -80,23 +90,24 @@ export async function searchGooglePlaces(niche: string, city: string) {
                     ratingCount: place.userRatingCount || 0
                 };
             });
+            const fetchedNextPageToken = data.nextPageToken || null;
+
+            // 4. Save to Cache
+            await supabase.from('runs').insert([{
+                workspace_id: profile.workspace_id,
+                query: queryStr,
+                city: city.toLowerCase(),
+                status: 'done',
+                started_at: new Date().toISOString(),
+                totals_json: { results: cleanData, nextPageToken: fetchedNextPageToken }
+            }]);
+
+            return { data: cleanData, nextPageToken: fetchedNextPageToken };
         } catch (error: any) {
             console.error("Failed to search places:", error);
             return { error: error.message || 'An unexpected error occurred.' };
         }
     }
-
-    // 4. Save to Cache
-    await supabase.from('runs').insert([{
-        workspace_id: profile.workspace_id,
-        query: queryStr,
-        city: city.toLowerCase(),
-        status: 'done',
-        started_at: new Date().toISOString(),
-        totals_json: { results: cleanData }
-    }]);
-
-    return { data: cleanData };
 }
 
 export async function getCityAutocomplete(input: string) {
@@ -171,10 +182,16 @@ export async function getAllSourcedLeads() {
     // Aggregate all historical results
     const masterList: Record<string, any>[] = [];
     const seenIds = new Set<string>();
+    const activeTokens: Record<string, string | null> = {};
 
     // Since we ordered descending, newer runs come first.
     // If a business was updated in a newer run, we keep the newer version.
     for (const run of runs) {
+        // Capture the most recent nextPageToken for a given query
+        if (activeTokens[run.query] === undefined) {
+            activeTokens[run.query] = run.totals_json?.nextPageToken || null;
+        }
+
         if (run.totals_json?.results && Array.isArray(run.totals_json.results)) {
             for (const business of run.totals_json.results) {
                 if (business && business.id && !seenIds.has(business.id)) {
@@ -185,5 +202,5 @@ export async function getAllSourcedLeads() {
         }
     }
 
-    return { data: masterList };
+    return { data: masterList, activeTokens };
 }

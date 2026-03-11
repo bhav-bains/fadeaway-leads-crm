@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
-import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink } from "lucide-react";
+import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -42,16 +42,33 @@ export default function LeadFinder() {
     const [auditedLeads, setAuditedLeads] = useState<Record<string, any>>({});
     const [isAuditing, setIsAuditing] = useState<Record<string, boolean>>({});
 
+    // Pagination State
+    const [activeTokens, setActiveTokens] = useState<Record<string, string | null>>({});
+    const [isLoadingMore, setIsLoadingMore] = useState<Record<string, boolean>>({});
+
+    // Collapsible Groups State
+    const [toggledGroups, setToggledGroups] = useState<Record<string, boolean>>({});
+
+    const isGroupExpanded = (groupName: string, index: number) => {
+        if (toggledGroups[groupName] !== undefined) return toggledGroups[groupName];
+        return index === 0;
+    };
+
+    const toggleGroup = (groupName: string, index: number) => {
+        setToggledGroups(prev => ({ ...prev, [groupName]: !isGroupExpanded(groupName, index) }));
+    };
+
     // Initial State Hydration
     const [isLoadingInitial, setIsLoadingInitial] = useState(true);
 
     useEffect(() => {
         const fetchInitialState = async () => {
             setIsLoadingInitial(true);
-            const { data } = await getAllSourcedLeads();
+            const { data, activeTokens: fetchedTokens } = await getAllSourcedLeads();
 
             if (data && data.length > 0) {
                 setResults(data);
+                if (fetchedTokens) setActiveTokens(fetchedTokens);
 
                 // Set default display values if available
                 if (data[0]?.city) setCity(data[0].city);
@@ -88,11 +105,15 @@ export default function LeadFinder() {
         setIsSearching(true);
         toast.info("Scraping in progress... this may take a few seconds.");
 
-        const { data, error } = await searchGooglePlaces(niche, city);
+        const result = await searchGooglePlaces(niche, city);
 
-        if (error) {
-            toast.error(error);
-        } else if (data) {
+        if (result?.error) {
+            toast.error(result.error);
+        } else if (result?.data) {
+            const { data, nextPageToken } = result;
+            const queryStr = `${niche} in ${city}`.toLowerCase();
+            setActiveTokens(prev => ({ ...prev, [queryStr]: nextPageToken || null }));
+
             // Append new results to master list, removing duplicates
             setResults(prev => {
                 const combined = [...data, ...prev];
@@ -110,9 +131,37 @@ export default function LeadFinder() {
         setIsSearching(false);
     };
 
+    const handleLoadMore = async (targetNiche: string, targetCity: string, token: string) => {
+        const queryStr = `${targetNiche} in ${targetCity}`.toLowerCase();
+        setIsLoadingMore(prev => ({ ...prev, [queryStr]: true }));
+        toast.info("Fetching next batch of 20 leads...");
+
+        const result = await searchGooglePlaces(targetNiche, targetCity, token);
+
+        if (result?.error) {
+            toast.error(result.error);
+        } else if (result?.data) {
+            const { data, nextPageToken } = result;
+            setActiveTokens(prev => ({ ...prev, [queryStr]: nextPageToken || null }));
+
+            setResults(prev => {
+                const combined = [...data, ...prev];
+                const seen = new Set();
+                return combined.filter(item => {
+                    const isDuplicate = seen.has(item.id);
+                    seen.add(item.id);
+                    return !isDuplicate;
+                });
+            });
+            toast.success(`Successfully fetched ${data.length} more leads!`);
+        }
+        setIsLoadingMore(prev => ({ ...prev, [queryStr]: false }));
+    };
+
     const handleSelectAll = (checked: boolean) => {
         if (checked) {
-            setSelectedIds(new Set(filteredResults.map(r => r.id)));
+            const allIds = groupedResultsArray.flatMap(g => g.groupLeads.map(r => r.id));
+            setSelectedIds(new Set(allIds));
         } else {
             setSelectedIds(new Set());
         }
@@ -238,20 +287,25 @@ export default function LeadFinder() {
         toast.success("CSV Exported successfully.");
     };
 
-    const filteredResults = results.filter(r => {
-        const auditData = auditedLeads[r.id];
+    const groupedResultsArray = useMemo(() => {
+        const uniqueGroups = Array.from(new Set(results.map(r => `${r.niche || 'Other'} in ${r.city || 'Unknown City'}`)));
 
-        if (minScore[0] > 0) {
-            if (!auditData || auditData.score < minScore[0]) return false;
-        }
-        if (requireEmail) {
-            if (!auditData || !auditData.email || auditData.email.trim() === '') return false;
-        }
+        return uniqueGroups.map(groupName => {
+            let groupLeads = results.filter(r => `${r.niche || 'Other'} in ${r.city || 'Unknown City'}` === groupName);
+            groupLeads = groupLeads.filter(r => {
+                const auditData = auditedLeads[r.id];
+                if (minScore[0] > 0 && (!auditData || auditData.score < minScore[0])) return false;
+                if (requireEmail && (!auditData || !auditData.email || auditData.email.trim() === '')) return false;
+                if (ratingFilter === "high" && r.rating < 4.0) return false;
+                if (ratingFilter === "low" && r.rating >= 4.0) return false;
+                return true;
+            });
+            groupLeads.sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
+            return { groupName, groupLeads };
+        }).filter(g => g.groupLeads.length > 0);
+    }, [results, minScore, requireEmail, ratingFilter, auditedLeads]);
 
-        if (ratingFilter === "high" && r.rating < 4.0) return false;
-        if (ratingFilter === "low" && r.rating >= 4.0) return false;
-        return true;
-    }).sort((a, b) => (b.ratingCount || 0) - (a.ratingCount || 0));
+    const filteredResultsCount = groupedResultsArray.reduce((sum, g) => sum + g.groupLeads.length, 0);
 
     return (
         <div className="flex flex-col gap-6 pb-12 w-full min-w-0">
@@ -365,7 +419,7 @@ export default function LeadFinder() {
                 <div className="space-y-4 animate-in fade-in duration-500">
                     <div className="flex items-center justify-between px-1">
                         <h3 className="text-lg font-medium text-foreground/80">
-                            Inbox contains <span className="font-bold text-foreground">{filteredResults.length}</span> Master Leads
+                            Inbox contains <span className="font-bold text-foreground">{filteredResultsCount}</span> Master Leads
                         </h3>
                     </div>
 
@@ -431,135 +485,143 @@ export default function LeadFinder() {
                                     <TableRow>
                                         <TableHead className="w-[50px]">
                                             <Checkbox
-                                                checked={selectedIds.size === filteredResults.length && filteredResults.length > 0}
+                                                checked={selectedIds.size === filteredResultsCount && filteredResultsCount > 0}
                                                 onCheckedChange={handleSelectAll}
                                             />
                                         </TableHead>
                                         <TableHead className="w-[280px]">Business & City</TableHead>
                                         <TableHead>Rating</TableHead>
-                                        <TableHead>Scraped Email</TableHead>
-                                        <TableHead className="text-center">Booking Link</TableHead>
-                                        <TableHead className="text-right">Audit Score</TableHead>
-                                        <TableHead className="w-[80px]"></TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {filteredResults.length === 0 ? (
+                                    {filteredResultsCount === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                            <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                                                 No leads match the current filters.
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        Object.entries(
-                                            filteredResults.reduce((acc, result: any) => {
-                                                const key = `${result.niche || 'Other'} in ${result.city || 'Unknown City'}`;
-                                                if (!acc[key]) acc[key] = [];
-                                                acc[key].push(result);
-                                                return acc;
-                                            }, {} as Record<string, Record<string, any>[]>)
-                                        ).map(([groupName, groupLeads]) => (
-                                            <Fragment key={groupName}>
-                                                <TableRow className="bg-slate-100/50 hover:bg-slate-100/50">
-                                                    <TableCell colSpan={7} className="py-2.5 font-semibold text-sm text-foreground/80 border-b-2">
-                                                        {groupName} <span className="text-xs font-normal text-muted-foreground ml-2">({groupLeads.length} leads)</span>
-                                                    </TableCell>
-                                                </TableRow>
-                                                {groupLeads.map((result: any) => {
-                                                    const auditData = auditedLeads[result.id];
-                                                    const isAuditingRow = isAuditing[result.id];
+                                        groupedResultsArray.map(({ groupName, groupLeads }, index) => {
+                                            const expanded = isGroupExpanded(groupName, index);
 
-                                                    return (
-                                                        <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
-                                                            <TableCell className="w-[50px]">
-                                                                <Checkbox
-                                                                    checked={selectedIds.has(result.id)}
-                                                                    onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell className="font-medium">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="truncate font-semibold text-base max-w-[200px]" title={result.name}>{result.name}</div>
-                                                                    {result.website ? (
-                                                                        <a href={result.website.startsWith('http') ? result.website : `https://${result.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors" title="Visit Website">
-                                                                            <ExternalLink className="h-3.5 w-3.5" />
-                                                                        </a>
-                                                                    ) : (
-                                                                        <Badge variant="destructive" className="h-[18px] text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold">No Website</Badge>
-                                                                    )}
-                                                                </div>
-                                                                <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px]" title={auditData?.biggestWeakness}>{auditData?.biggestWeakness || 'Not audited yet'}</div>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <div className="flex items-center gap-1 text-sm font-medium">
-                                                                    ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
-                                                                </div>
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {!auditData ? (
-                                                                    <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
-                                                                ) : auditData.email ? (
-                                                                    <span className="text-sm font-medium truncate max-w-[150px] inline-block" title={auditData.email}>{auditData.email}</span>
-                                                                ) : (
-                                                                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">Not Found</span>
+                                            return (
+                                                <Fragment key={groupName}>
+                                                    <TableRow
+                                                        className="bg-slate-100/50 hover:bg-slate-200/50 cursor-pointer"
+                                                        onClick={() => toggleGroup(groupName, index)}
+                                                    >
+                                                        <TableCell colSpan={4} className="py-3 font-semibold text-sm text-foreground/80 border-b-2">
+                                                            <div className="flex items-center select-none">
+                                                                {expanded ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
+                                                                {groupName} <span className="text-xs font-normal text-muted-foreground ml-2">({groupLeads.length} leads)</span>
+                                                                {!expanded && (
+                                                                    <Badge variant="outline" className="ml-auto text-[10px] uppercase font-bold text-muted-foreground mr-4">Click to View</Badge>
                                                                 )}
-                                                            </TableCell>
-                                                            <TableCell className="text-center">
-                                                                {!auditData ? (
-                                                                    <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
-                                                                ) : auditData.bookingDetected ? (
-                                                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Yes</Badge>
-                                                                ) : (
-                                                                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Missing</Badge>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-right">
-                                                                {!auditData ? (
-                                                                    <span className="text-xs text-muted-foreground font-mono">[ ? ]</span>
-                                                                ) : (
-                                                                    <Badge variant={auditData.score >= 12 ? 'default' : (auditData.score >= 7 ? 'secondary' : 'outline')} className="px-2 font-bold text-xs">
-                                                                        {auditData.score}/20
-                                                                    </Badge>
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="w-[80px]">
-                                                                <div className="flex items-center gap-1">
-                                                                    {!auditData && (
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+
+                                                    {expanded && groupLeads.map((result: any) => {
+                                                        const auditData = auditedLeads[result.id];
+                                                        const isAuditingRow = isAuditing[result.id];
+
+                                                        return (
+                                                            <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
+                                                                <TableCell className="w-[50px]">
+                                                                    <Checkbox
+                                                                        checked={selectedIds.has(result.id)}
+                                                                        onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
+                                                                    />
+                                                                </TableCell>
+                                                                <TableCell className="font-medium">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="truncate font-semibold text-base max-w-[200px]" title={result.name}>{result.name}</div>
+                                                                        {result.website ? (
+                                                                            <a href={result.website.startsWith('http') ? result.website : `https://${result.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors" title="Visit Website">
+                                                                                <ExternalLink className="h-3.5 w-3.5" />
+                                                                            </a>
+                                                                        ) : (
+                                                                            <Badge variant="destructive" className="h-[18px] text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold">No Website</Badge>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px]" title={auditData?.biggestWeakness}>{auditData?.biggestWeakness || 'Not audited yet'}</div>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div className="flex items-center gap-1 text-sm font-medium">
+                                                                        ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="text-right py-2">
+                                                                    <div className="flex items-center justify-end gap-2">
+                                                                        {!auditData ? (
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="secondary"
+                                                                                className="h-8 font-medium"
+                                                                                onClick={() => handleRunAudit(result)}
+                                                                                disabled={isAuditingRow}
+                                                                            >
+                                                                                {isAuditingRow ? <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 mr-2 text-primary" />}
+                                                                                Run Audit
+                                                                            </Button>
+                                                                        ) : (
+                                                                            <Badge variant={auditData.score >= 12 ? 'default' : (auditData.score >= 7 ? 'secondary' : 'outline')} className="px-3 py-1 font-bold text-xs h-8 flex items-center justify-center">
+                                                                                Score: {auditData.score}/20
+                                                                            </Badge>
+                                                                        )}
                                                                         <Button
                                                                             size="sm"
-                                                                            variant="ghost"
-                                                                            className="h-8 w-8 p-0"
-                                                                            onClick={() => handleRunAudit(result)}
-                                                                            disabled={isAuditingRow}
-                                                                            title="Run Audit & Enrich"
+                                                                            variant="default"
+                                                                            className="h-8 bg-black text-white hover:bg-black/80 font-medium"
+                                                                            onClick={() => {
+                                                                                const newSet = new Set([result.id]);
+                                                                                setSelectedIds(newSet);
+                                                                                setTimeout(() => {
+                                                                                    document.getElementById('bulk-assign-btn')?.click();
+                                                                                }, 50);
+                                                                            }}
+                                                                            disabled={leads.some(l => l.name === result.name)}
                                                                         >
-                                                                            {isAuditingRow ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 text-primary" />}
-                                                                            <span className="sr-only">Run Audit & Enrich</span>
+                                                                            <Send className="h-4 w-4 mr-2" />
+                                                                            Pipeline
                                                                         </Button>
-                                                                    )}
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        className="h-8 w-8 p-0"
-                                                                        onClick={() => {
-                                                                            const newSet = new Set([result.id]);
-                                                                            setSelectedIds(newSet);
-                                                                            setTimeout(() => {
-                                                                                document.getElementById('bulk-assign-btn')?.click();
-                                                                            }, 50);
-                                                                        }}
-                                                                        disabled={leads.some(l => l.name === result.name)}
-                                                                        title="Save to Pipeline"
-                                                                    >
-                                                                        <Send className="h-4 w-4 text-primary" />
-                                                                    </Button>
-                                                                </div>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    )
-                                                })}
-                                            </Fragment>
-                                        ))
+                                                                    </div>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )
+                                                    })}
+
+                                                    {expanded && (() => {
+                                                        const targetNiche = groupLeads[0]?.niche || niche;
+                                                        const targetCity = groupLeads[0]?.city || city;
+                                                        const queryStr = `${targetNiche} in ${targetCity}`.toLowerCase();
+                                                        const hasToken = activeTokens[queryStr];
+                                                        const isLoading = isLoadingMore[queryStr];
+
+                                                        if (hasToken) {
+                                                            return (
+                                                                <TableRow>
+                                                                    <TableCell colSpan={4} className="text-center py-6 bg-slate-50/50 border-b-2">
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            onClick={() => handleLoadMore(targetNiche, targetCity, hasToken)}
+                                                                            disabled={isLoading}
+                                                                            className="bg-white"
+                                                                        >
+                                                                            {isLoading ? <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 mr-2" />}
+                                                                            {isLoading ? 'Fetching Leads...' : 'Load 20 More Leads'}
+                                                                        </Button>
+                                                                        <p className="text-xs text-muted-foreground mt-2">There are more undiscovered businesses available for this search.</p>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
+                                                </Fragment>
+                                            )
+                                        })
                                     )}
                                 </TableBody>
                             </Table>
