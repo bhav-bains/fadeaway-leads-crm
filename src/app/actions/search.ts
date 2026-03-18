@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { normalizeQueryKey } from '@/lib/utils';
 
 export async function searchGooglePlaces(niche: string, city: string, pageToken?: string) {
     const supabase = await createClient();
@@ -12,7 +13,7 @@ export async function searchGooglePlaces(niche: string, city: string, pageToken?
     const { data: profile } = await supabase.from('profiles').select('workspace_id').eq('id', user.id).single();
     if (!profile || !profile.workspace_id) return { error: 'No workspace found for user' };
 
-    const queryStr = `${niche} in ${city}`.toLowerCase();
+    const queryStr = normalizeQueryKey(niche, city);
 
     // 2. Check Cache
     if (!pageToken) {
@@ -202,5 +203,102 @@ export async function getAllSourcedLeads() {
         }
     }
 
-    return { data: masterList, activeTokens };
+    // 4. Hydrate Audited Leads from DB
+    // We fetch all companies that have been audited in this workspace
+    const { data: auditedCompanies } = await supabase
+        .from('companies')
+        .select(`
+            id,
+            source_id,
+            website,
+            city,
+            rating_count,
+            scores!left (score_overall, score_contactability, score_seo, score_local_intent, score_fit),
+            seo_audits!left (has_title, title_len, has_h1, has_booking_link, schema_org_types, top_keywords_found),
+            contacts!left (email, type),
+            socials!left (platform, url)
+        `)
+        .eq('workspace_id', profile.workspace_id)
+        .not('source_id', 'is', null);
+
+    const auditedLeadsMap: Record<string, any> = {};
+    console.log(`[Hydration] Starting hydration for workspace: ${profile.workspace_id}`);
+    
+    if (auditedCompanies) {
+        console.log(`[Hydration] Found ${auditedCompanies.length} audited companies in Supabase for this workspace.`);
+        for (const company of auditedCompanies) {
+            // Find the matching lead in our masterList by Google Place ID (source_id)
+            const matchingLead = masterList.find(l => l.id === company.source_id);
+            
+            if (matchingLead) {
+                console.log(`[Hydration] MATCH FOUND for ${matchingLead.name} (${company.source_id})`);
+                if (company.scores && company.scores.length > 0) {
+                    const score = company.scores[0];
+                    const audit = company.seo_audits?.[0];
+                    
+                    // Reconstruct a compatible ScrapeResult-like object for the frontend
+                    auditedLeadsMap[matchingLead.id] = {
+                        score: score.score_overall,
+                        email: company.contacts?.[0]?.email || '',
+                        biggestWeakness: '', 
+                        bookingDetected: audit?.has_booking_link || false,
+                        rawScrape: {
+                            totalScore: score.score_overall,
+                            contactabilityScore: score.score_contactability,
+                            seoScore: score.score_seo,
+                            localIntentScore: score.score_local_intent,
+                            fitScore: score.score_fit,
+                            emails: company.contacts || [],
+                            socials: company.socials || [],
+                            scoreBreakdown: {
+                                total: score.score_overall,
+                                categories: {
+                                    uxDecay: { score: 0, max: 45 }, // Estimates since we don't store breakdowns yet
+                                    cashFlow: { score: 0, max: 30 },
+                                    contactability: { score: score.score_contactability, max: 25 }
+                                },
+                                triggeredRules: []
+                            },
+                            seoAudit: {
+                                has_title: audit?.has_title || false,
+                                title_len: audit?.title_len || 0,
+                                has_h1: audit?.has_h1 || false,
+                                has_booking_link: audit?.has_booking_link || false,
+                                has_schema: (audit?.schema_org_types?.length || 0) > 0,
+                            },
+                            enrichment: {
+                                contacts: {
+                                    emails: company.contacts || [],
+                                    hasContactForm: company.contacts?.some((c: any) => c.type === 'form_only') || false,
+                                    hasPhone: !!matchingLead.phone,
+                                },
+                                seo: {
+                                    titleTag: { text: '', isEmpty: !audit?.has_title },
+                                    h1Tags: { count: audit?.has_h1 ? 1 : 0, texts: [] },
+                                    metaDescription: { exists: false, content: '' },
+                                    hasViewport: true,
+                                    hasNoIndex: false,
+                                    hasSchemaMarkup: (audit?.schema_org_types?.length || 0) > 0,
+                                },
+                                socials: {
+                                    facebook: company.socials?.find((s: any) => s.platform === 'facebook'),
+                                    instagram: company.socials?.find((s: any) => s.platform === 'instagram'),
+                                    tiktok: company.socials?.find((s: any) => s.platform === 'tiktok'),
+                                }
+                            }
+                        }
+                    };
+                }
+            } else {
+                // This is a common case if the user is looking at a new search results batch
+                // but we have historical audits for companies not in this batch.
+            }
+        }
+    }
+    console.log(`[Hydration] Finished. Runs: ${runs?.length || 0}. Hydrated: ${Object.keys(auditedLeadsMap).length}`);
+
+    return { data: masterList, activeTokens, auditedLeads: auditedLeadsMap };
 }
+
+
+

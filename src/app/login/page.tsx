@@ -14,7 +14,7 @@ export default async function LoginPage({
         <div className="flex h-screen w-screen items-center justify-center bg-gray-50/50">
             <Card className="w-full max-w-sm">
                 <CardHeader className="space-y-1 text-center">
-                    <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+                    <CardTitle className="text-2xl font-bold">Welcome</CardTitle>
                     <CardDescription>
                         Sign in to your Fadeaway Leads account
                     </CardDescription>

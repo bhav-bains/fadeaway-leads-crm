@@ -10,16 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
-import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, normalizeQueryKey } from "@/lib/utils";
 import { insertLead, runLocalSeoAudit } from "@/app/actions/leads";
 import { searchGooglePlaces, getCityAutocomplete, getAllSourcedLeads } from "@/app/actions/search";
 import { useEffect, Fragment } from "react";
+import type { EnrichmentData, ScoreBreakdown } from "@/lib/scraper";
 
 export default function LeadFinder() {
     const [niche, setNiche] = useState("");
@@ -46,6 +48,9 @@ export default function LeadFinder() {
     const [activeTokens, setActiveTokens] = useState<Record<string, string | null>>({});
     const [isLoadingMore, setIsLoadingMore] = useState<Record<string, boolean>>({});
 
+    // Enrichment Drawer State
+    const [drawerLead, setDrawerLead] = useState<Record<string, any> | null>(null);
+
     // Collapsible Groups State
     const [toggledGroups, setToggledGroups] = useState<Record<string, boolean>>({});
 
@@ -64,11 +69,13 @@ export default function LeadFinder() {
     useEffect(() => {
         const fetchInitialState = async () => {
             setIsLoadingInitial(true);
-            const { data, activeTokens: fetchedTokens } = await getAllSourcedLeads();
+            const { data, activeTokens: fetchedTokens, auditedLeads: dbAuditedLeads } = await getAllSourcedLeads();
 
             if (data && data.length > 0) {
+                console.log(`[LeadFinder] Restoring ${Object.keys(dbAuditedLeads || {}).length} audited leads from DB...`);
                 setResults(data);
                 if (fetchedTokens) setActiveTokens(fetchedTokens);
+                if (dbAuditedLeads) setAuditedLeads(dbAuditedLeads);
 
                 // Set default display values if available
                 if (data[0]?.city) setCity(data[0].city);
@@ -111,7 +118,7 @@ export default function LeadFinder() {
             toast.error(result.error);
         } else if (result?.data) {
             const { data, nextPageToken } = result;
-            const queryStr = `${niche} in ${city}`.toLowerCase();
+            const queryStr = normalizeQueryKey(niche, city);
             setActiveTokens(prev => ({ ...prev, [queryStr]: nextPageToken || null }));
 
             // Append new results to master list, removing duplicates
@@ -132,7 +139,7 @@ export default function LeadFinder() {
     };
 
     const handleLoadMore = async (targetNiche: string, targetCity: string, token: string) => {
-        const queryStr = `${targetNiche} in ${targetCity}`.toLowerCase();
+        const queryStr = normalizeQueryKey(targetNiche, targetCity);
         setIsLoadingMore(prev => ({ ...prev, [queryStr]: true }));
         toast.info("Fetching next batch of 20 leads...");
 
@@ -175,8 +182,27 @@ export default function LeadFinder() {
     };
 
     const handleRunAudit = async (lead: Record<string, any>) => {
+        // If already audited, just open the drawer
+        const auditData = auditedLeads[lead.id];
+        if (auditData) {
+            setDrawerLead({ ...lead, auditData });
+            return;
+        }
+
         setIsAuditing(prev => ({ ...prev, [lead.id]: true }));
-        const { data, error } = await runLocalSeoAudit(lead.website, lead.city, lead.niche, lead.ratingCount);
+        const { data, error } = await runLocalSeoAudit(
+            lead.website, 
+            lead.city, 
+            lead.niche, 
+            lead.ratingCount,
+            {
+                name: lead.name,
+                address: lead.address,
+                phone: lead.phone,
+                reviewCount: lead.ratingCount,
+                googlePlaceId: lead.id
+            }
+        );
         setIsAuditing(prev => ({ ...prev, [lead.id]: false }));
 
         if (data) {
@@ -198,7 +224,19 @@ export default function LeadFinder() {
 
         for (const lead of selectedLeads) {
             setIsAuditing(prev => ({ ...prev, [lead.id]: true }));
-            const { data } = await runLocalSeoAudit(lead.website, lead.city, lead.niche, lead.ratingCount);
+            const { data } = await runLocalSeoAudit(
+                lead.website, 
+                lead.city, 
+                lead.niche, 
+                lead.ratingCount,
+                {
+                    name: lead.name,
+                    address: lead.address,
+                    phone: lead.phone,
+                    reviewCount: lead.ratingCount,
+                    googlePlaceId: lead.id
+                }
+            );
             setIsAuditing(prev => ({ ...prev, [lead.id]: false }));
             if (data) {
                 setAuditedLeads(prev => ({ ...prev, [lead.id]: data }));
@@ -491,13 +529,14 @@ export default function LeadFinder() {
                                         </TableHead>
                                         <TableHead className="w-[280px]">Business & City</TableHead>
                                         <TableHead>Rating</TableHead>
+                                        <TableHead>Audit Intel</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {filteredResultsCount === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                                            <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                                                 No leads match the current filters.
                                             </TableCell>
                                         </TableRow>
@@ -511,10 +550,17 @@ export default function LeadFinder() {
                                                         className="bg-slate-100/50 hover:bg-slate-200/50 cursor-pointer"
                                                         onClick={() => toggleGroup(groupName, index)}
                                                     >
-                                                        <TableCell colSpan={4} className="py-3 font-semibold text-sm text-foreground/80 border-b-2">
+                                                        <TableCell colSpan={5} className="py-3 font-semibold text-sm text-foreground/80 border-b-2">
                                                             <div className="flex items-center select-none">
                                                                 {expanded ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
-                                                                {groupName} <span className="text-xs font-normal text-muted-foreground ml-2">({groupLeads.length} leads)</span>
+                                                                {groupName}
+                                                                <span className="text-xs font-normal text-muted-foreground ml-2">({groupLeads.length} leads)</span>
+                                                                {(() => {
+                                                                    const auditedCount = groupLeads.filter((l: any) => auditedLeads[l.id]).length;
+                                                                    return auditedCount > 0 ? (
+                                                                        <span className="text-xs font-medium text-green-600 ml-1.5">· {auditedCount} audited</span>
+                                                                    ) : null;
+                                                                })()}
                                                                 {!expanded && (
                                                                     <Badge variant="outline" className="ml-auto text-[10px] uppercase font-bold text-muted-foreground mr-4">Click to View</Badge>
                                                                 )}
@@ -527,53 +573,89 @@ export default function LeadFinder() {
                                                         const isAuditingRow = isAuditing[result.id];
 
                                                         return (
-                                                            <TableRow key={result.id} className={leads.some(l => l.name === result.name) ? "opacity-50" : ""}>
-                                                                <TableCell className="w-[50px]">
+                                                            <TableRow key={result.id} className={`${leads.some(l => l.name === result.name) ? "opacity-40" : "hover:bg-slate-50/80"} transition-colors border-l-[3px] ${auditData ? 'border-l-emerald-400' : 'border-l-transparent'}`}>
+                                                                <TableCell className="w-[50px] pl-4">
                                                                     <Checkbox
                                                                         checked={selectedIds.has(result.id)}
                                                                         onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
+                                                                        className="data-[state=checked]:bg-primary"
                                                                     />
                                                                 </TableCell>
-                                                                <TableCell className="font-medium">
+                                                                <TableCell className="font-medium py-3">
                                                                     <div className="flex items-center gap-2">
-                                                                        <div className="truncate font-semibold text-base max-w-[200px]" title={result.name}>{result.name}</div>
+                                                                        <div className={`h-2 w-2 rounded-full shrink-0 ${auditData ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                                                                        <div className="truncate font-semibold text-[14px] max-w-[220px]" title={result.name}>{result.name}</div>
                                                                         {result.website ? (
-                                                                            <a href={result.website.startsWith('http') ? result.website : `https://${result.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors" title="Visit Website">
+                                                                            <a href={result.website.startsWith('http') ? result.website : `https://${result.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors hover:scale-110" title="Visit Website">
                                                                                 <ExternalLink className="h-3.5 w-3.5" />
                                                                             </a>
                                                                         ) : (
-                                                                            <Badge variant="destructive" className="h-[18px] text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold">No Website</Badge>
+                                                                            <Badge variant="destructive" className="h-[18px] text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold">No Site</Badge>
                                                                         )}
                                                                     </div>
-                                                                    <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px]" title={auditData?.biggestWeakness}>{auditData?.biggestWeakness || 'Not audited yet'}</div>
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <div className="flex items-center gap-1 text-sm font-medium">
-                                                                        ⭐ {result.rating} <span className="text-xs text-muted-foreground font-normal">({result.ratingCount})</span>
+                                                                    <div className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[220px] pl-4" title={auditData?.biggestWeakness}>
+                                                                        {auditData?.biggestWeakness || (
+                                                                            <span className="italic text-slate-400">Awaiting audit</span>
+                                                                        )}
                                                                     </div>
                                                                 </TableCell>
-                                                                <TableCell className="text-right py-2">
+                                                                <TableCell className="py-3">
+                                                                    <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-full px-2.5 py-1 text-sm font-medium">
+                                                                        <span className="text-amber-500">★</span> {result.rating}
+                                                                        <span className="text-[11px] text-amber-500/70 font-normal">({result.ratingCount})</span>
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell className="py-3">
+                                                                    {auditData ? (
+                                                                        <div className="flex items-center gap-2.5">
+                                                                            {(() => {
+                                                                                const score = auditData.rawScrape?.scoreBreakdown?.total ?? auditData.score ?? 0;
+                                                                                const bg = score >= 60 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : score >= 30 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-200';
+                                                                                return <span className={`inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full border ${bg}`}>{score}/100</span>;
+                                                                            })()}
+                                                                            {auditData.email && (
+                                                                                <a href={`mailto:${auditData.email}`} className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200/50 rounded-full px-2 py-0.5 truncate max-w-[180px] transition-colors" title={auditData.email}>
+                                                                                    <Mail className="h-3 w-3 flex-shrink-0" />{auditData.email}
+                                                                                </a>
+                                                                            )}
+                                                                            {auditData.rawScrape?.enrichment?.socials?.instagram && (
+                                                                                <a href={auditData.rawScrape.enrichment.socials.instagram.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-pink-600 hover:text-pink-800 bg-pink-50 hover:bg-pink-100 border border-pink-200/50 rounded-full px-2 py-0.5 transition-colors shrink-0">
+                                                                                    <Instagram className="h-3 w-3 flex-shrink-0" />
+                                                                                    {auditData.rawScrape.enrichment.socials.instagram.handle || 'IG'}
+                                                                                </a>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-xs text-slate-300 italic">—</span>
+                                                                    )}
+                                                                </TableCell>
+                                                                <TableCell className="text-right py-3 pr-4">
                                                                     <div className="flex items-center justify-end gap-2">
                                                                         {!auditData ? (
                                                                             <Button
                                                                                 size="sm"
                                                                                 variant="secondary"
-                                                                                className="h-8 font-medium"
+                                                                                className="h-9 px-5 font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
                                                                                 onClick={() => handleRunAudit(result)}
                                                                                 disabled={isAuditingRow}
                                                                             >
-                                                                                {isAuditingRow ? <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 mr-2 text-primary" />}
+                                                                                {isAuditingRow ? <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 mr-2 text-slate-500" />}
                                                                                 Run Audit
                                                                             </Button>
                                                                         ) : (
-                                                                            <Badge variant={auditData.score >= 12 ? 'default' : (auditData.score >= 7 ? 'secondary' : 'outline')} className="px-3 py-1 font-bold text-xs h-8 flex items-center justify-center">
-                                                                                Score: {auditData.score}/20
-                                                                            </Badge>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                className="h-9 px-5 font-medium border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                                                                onClick={() => setDrawerLead({ ...result, auditData })}
+                                                                            >
+                                                                                <Eye className="h-4 w-4 mr-1.5" /> View Data
+                                                                            </Button>
                                                                         )}
                                                                         <Button
                                                                             size="sm"
                                                                             variant="default"
-                                                                            className="h-8 bg-black text-white hover:bg-black/80 font-medium"
+                                                                            className="h-9 px-5 bg-gradient-to-r from-slate-800 to-slate-900 text-white hover:from-slate-700 hover:to-slate-800 font-medium shadow-sm"
                                                                             onClick={() => {
                                                                                 const newSet = new Set([result.id]);
                                                                                 setSelectedIds(newSet);
@@ -583,7 +665,7 @@ export default function LeadFinder() {
                                                                             }}
                                                                             disabled={leads.some(l => l.name === result.name)}
                                                                         >
-                                                                            <Send className="h-4 w-4 mr-2" />
+                                                                            <Send className="h-3.5 w-3.5 mr-1.5" />
                                                                             Pipeline
                                                                         </Button>
                                                                     </div>
@@ -595,7 +677,7 @@ export default function LeadFinder() {
                                                     {expanded && (() => {
                                                         const targetNiche = groupLeads[0]?.niche || niche;
                                                         const targetCity = groupLeads[0]?.city || city;
-                                                        const queryStr = `${targetNiche} in ${targetCity}`.toLowerCase();
+                                                        const queryStr = normalizeQueryKey(targetNiche, targetCity);
                                                         const hasToken = activeTokens[queryStr];
                                                         const isLoading = isLoadingMore[queryStr];
 
@@ -629,6 +711,275 @@ export default function LeadFinder() {
                     </div>
                 </div>
             )}
+            {/* Enrichment Data Drawer */}
+            <Sheet open={!!drawerLead} onOpenChange={(o) => { if (!o) setDrawerLead(null); }}>
+                <SheetContent side="right" className="w-[420px] sm:w-[520px] overflow-y-auto p-0 max-h-screen">
+                    {drawerLead && (() => {
+                        const audit = drawerLead.auditData;
+                        const enrichment: EnrichmentData | undefined = audit?.rawScrape?.enrichment;
+
+                        return (
+                            <div className="flex flex-col h-full bg-slate-50">
+                                {/* Header */}
+                                <div className="px-6 py-6 bg-white border-b sticky top-0 z-10 shadow-sm">
+                                    <SheetTitle className="text-xl font-bold leading-tight">{drawerLead.name}</SheetTitle>
+                                    <SheetDescription className="mt-1 flex items-center text-sm">
+                                        <MapPin className="h-3.5 w-3.5 mr-1" /> {drawerLead.city}
+                                        {drawerLead.website && (
+                                            <a href={drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`} target="_blank" rel="noopener noreferrer" className="ml-3 text-blue-500 hover:text-blue-700 flex items-center">
+                                                <Globe className="h-3.5 w-3.5 mr-1" /> Visit Site
+                                            </a>
+                                        )}
+                                    </SheetDescription>
+                                    <div className="flex items-center gap-2 mt-3 text-sm">
+                                        <span className="flex items-center gap-1">⭐ {drawerLead.rating}</span>
+                                        <span className="text-muted-foreground">({drawerLead.ratingCount} reviews)</span>
+                                        {audit?.rawScrape?.scoreBreakdown ? (() => {
+                                            const sb: ScoreBreakdown = audit.rawScrape.scoreBreakdown;
+                                            const variant = sb.total >= 60 ? 'default' : sb.total >= 30 ? 'secondary' : 'outline';
+                                            return <Badge variant={variant} className="ml-auto text-sm px-3 py-1">{sb.total}/100</Badge>;
+                                        })() : audit?.score !== undefined && (
+                                            <Badge variant={audit.score >= 60 ? 'default' : 'secondary'} className="ml-auto">
+                                                Score: {audit.score}/100
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Enrichment Cards */}
+                                <div className="p-6 space-y-4 flex-1">
+                                    {!enrichment ? (
+                                        <div className="text-sm text-muted-foreground text-center p-8 border rounded-lg bg-white">
+                                            No enrichment data available. Run an audit first.
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Score Breakdown */}
+                                            {audit?.rawScrape?.scoreBreakdown && (() => {
+                                                const sb: ScoreBreakdown = audit.rawScrape.scoreBreakdown;
+                                                const categories = [
+                                                    { label: 'UX Decay & Technical', score: sb.uxDecayTechnical, max: 45, color: 'bg-red-500' },
+                                                    { label: 'Cash Flow & Maturity', score: sb.cashFlowMaturity, max: 30, color: 'bg-blue-500' },
+                                                    { label: 'Contactability', score: sb.contactability, max: 25, color: 'bg-green-500' },
+                                                ];
+                                                return (
+                                                    <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                                        <div className="bg-muted/50 px-4 py-2 border-b">
+                                                            <h3 className="font-semibold text-sm">Score Breakdown ({sb.total}/100)</h3>
+                                                        </div>
+                                                        <div className="p-4 space-y-3">
+                                                            {categories.map((cat, i) => (
+                                                                <div key={i} className="space-y-1">
+                                                                    <div className="flex justify-between text-xs">
+                                                                        <span className="font-medium">{cat.label}</span>
+                                                                        <span className="text-muted-foreground">{cat.score}/{cat.max}</span>
+                                                                    </div>
+                                                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                                        <div
+                                                                            className={`h-full ${cat.color} rounded-full transition-all`}
+                                                                            style={{ width: `${(cat.score / cat.max) * 100}%` }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                            {sb.rulesTriggered && sb.rulesTriggered.length > 0 && (
+                                                                <div className="pt-2 border-t mt-3">
+                                                                    <span className="text-xs font-semibold text-muted-foreground uppercase">Rules Triggered</span>
+                                                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                                        {sb.rulesTriggered.map((rule: string, i: number) => (
+                                                                            <Badge key={i} variant="outline" className="text-[10px]">{rule}</Badge>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                            {/* 1. Contacts */}
+                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                                <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
+                                                    <Mail className="h-4 w-4 text-muted-foreground" />
+                                                    <h3 className="font-semibold text-sm">Contact Information</h3>
+                                                </div>
+                                                <div className="p-4 space-y-3 text-sm">
+                                                    {enrichment.contacts.emails.length > 0 ? (
+                                                        <div className="space-y-1.5">
+                                                            {enrichment.contacts.emails.map((e, i) => (
+                                                                <div key={i} className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
+                                                                    <span className="font-medium">{e.email}</span>
+                                                                    <div className="flex gap-1.5">
+                                                                        <Badge variant="outline" className="text-[10px] bg-white">{e.type}</Badge>
+                                                                        <Badge variant="outline" className="text-[10px] bg-white">{e.source}</Badge>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-muted-foreground italic">No emails found</span>
+                                                    )}
+                                                    <div className="flex items-center gap-2 pt-1">
+                                                        {enrichment.contacts.hasContactForm ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
+                                                        <span>Contact Form</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {enrichment.contacts.hasPhone ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
+                                                        <span>Phone Number (tel: link)</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* 2. Technical SEO */}
+                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                                <div className="bg-muted/50 px-4 py-2 border-b">
+                                                    <h3 className="font-semibold text-sm">Technical SEO</h3>
+                                                </div>
+                                                <div className="p-4 space-y-2 text-sm">
+                                                    {[
+                                                        { label: 'Title Tag', ok: !enrichment.seo.titleTag.isEmpty, detail: enrichment.seo.titleTag.text || '(empty)' },
+                                                        { label: `H1 Tags (${enrichment.seo.h1Tags.count})`, ok: enrichment.seo.h1Tags.count > 0, detail: enrichment.seo.h1Tags.texts[0] || '(none)' },
+                                                        { label: 'Meta Description', ok: enrichment.seo.metaDescription.exists, detail: enrichment.seo.metaDescription.content || '(missing)' },
+                                                        { label: 'Mobile Viewport', ok: enrichment.seo.hasViewport, detail: enrichment.seo.hasViewport ? 'Present' : 'Missing' },
+                                                        { label: 'Schema Markup', ok: enrichment.seo.hasSchemaMarkup, detail: enrichment.seo.hasSchemaMarkup ? 'Present' : 'Missing' },
+                                                        { label: 'NoIndex (Fatal Flaw)', ok: !enrichment.seo.hasNoIndex, detail: enrichment.seo.hasNoIndex ? '⚠️ BLOCKED' : 'Not blocked' },
+                                                    ].map((item, idx) => (
+                                                        <div key={idx} className="flex items-start justify-between bg-slate-50 px-3 py-2 rounded border">
+                                                            <div className="flex-1 min-w-0">
+                                                                <span className="font-medium">{item.label}</span>
+                                                                <p className="text-xs text-muted-foreground truncate mt-0.5" title={item.detail}>{item.detail}</p>
+                                                            </div>
+                                                            {item.ok ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" /> : <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* 3. Tracking Pixels */}
+                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                                <div className="bg-muted/50 px-4 py-2 border-b">
+                                                    <h3 className="font-semibold text-sm">Tracking Pixels</h3>
+                                                </div>
+                                                <div className="p-4 space-y-2 text-sm">
+                                                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
+                                                        <span className="font-medium">Meta Pixel (Facebook)</span>
+                                                        {enrichment?.pixels?.hasMetaPixel ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
+                                                    </div>
+                                                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
+                                                        <span className="font-medium">Google Ads / Analytics</span>
+                                                        {enrichment?.pixels?.hasGoogleAds ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* 4. Business Expansion */}
+                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                                <div className="bg-muted/50 px-4 py-2 border-b">
+                                                    <h3 className="font-semibold text-sm">Business Expansion Keywords</h3>
+                                                </div>
+                                                <div className="p-4 text-sm">
+                                                    {enrichment?.expansionKeywords?.length > 0 ? (
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {(enrichment?.expansionKeywords || []).map((kw: string, i: number) => (
+                                                                <Badge key={i} variant="secondary" className="text-xs">{kw}</Badge>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-muted-foreground italic">No expansion keywords detected</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* 5. CTAs & Booking */}
+                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                                <div className="bg-muted/50 px-4 py-2 border-b">
+                                                    <h3 className="font-semibold text-sm">CTAs & Booking Links</h3>
+                                                </div>
+                                                <div className="p-4 space-y-3 text-sm">
+                                                    <div className="flex items-center gap-2">
+                                                        {enrichment?.ctas?.hasGeneralCTA ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
+                                                        <span>General CTA Detected</span>
+                                                    </div>
+                                                    {enrichment?.ctas?.bookingUrls?.length > 0 ? (
+                                                        <div className="space-y-1.5">
+                                                            <span className="text-xs font-semibold text-muted-foreground uppercase">Booking Software</span>
+                                                            {(enrichment?.ctas?.bookingUrls || []).map((b: any, i: number) => (
+                                                                <div key={i} className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
+                                                                    <Badge variant="default" className="text-xs">{b.platform}</Badge>
+                                                                    <a href={b.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline truncate ml-2 max-w-[200px]">{b.url}</a>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-muted-foreground italic">No external booking software detected</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* 6. Social Media */}
+                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                                <div className="bg-muted/50 px-4 py-2 border-b">
+                                                    <h3 className="font-semibold text-sm">Social Media</h3>
+                                                </div>
+                                                <div className="p-4 space-y-2 text-sm">
+                                                    {enrichment?.socials?.instagram ? (
+                                                        <a href={enrichment.socials.instagram.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border hover:bg-slate-100 transition-colors">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <Badge variant="outline" className="text-xs shrink-0">Instagram</Badge>
+                                                                <span className="font-medium text-blue-600 truncate">@{enrichment.socials.instagram.handle}</span>
+                                                            </div>
+                                                            <ExternalLink className="h-3.5 w-3.5 text-blue-500 shrink-0 ml-2" />
+                                                        </a>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 text-muted-foreground"><XCircle className="h-4 w-4 text-red-400" /> No Instagram found</div>
+                                                    )}
+                                                    {enrichment?.socials?.facebook ? (
+                                                        <a href={enrichment.socials.facebook.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border hover:bg-slate-100 transition-colors">
+                                                            <Badge variant="outline" className="text-xs">Facebook</Badge>
+                                                            <ExternalLink className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                                        </a>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 text-muted-foreground"><XCircle className="h-4 w-4 text-red-400" /> No Facebook found</div>
+                                                    )}
+                                                    {enrichment?.socials?.tiktok ? (
+                                                        <a href={enrichment.socials.tiktok.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border hover:bg-slate-100 transition-colors">
+                                                            <Badge variant="outline" className="text-xs">TikTok</Badge>
+                                                            <ExternalLink className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                                        </a>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2 text-muted-foreground"><XCircle className="h-4 w-4 text-red-400" /> No TikTok found</div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* 7. UX Decay Signals */}
+                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                                <div className="bg-muted/50 px-4 py-2 border-b">
+                                                    <h3 className="font-semibold text-sm">UX Decay Signals</h3>
+                                                </div>
+                                                <div className="p-4 space-y-2 text-sm">
+                                                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
+                                                        <div>
+                                                            <span className="font-medium">Copyright Year</span>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {enrichment?.uxDecay?.copyrightYear ? `© ${enrichment.uxDecay.copyrightYear}` : 'Not found'}
+                                                            </p>
+                                                        </div>
+                                                        {enrichment?.uxDecay?.isOutdatedCopyright ? <XCircle className="h-4 w-4 text-red-500" /> : <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                                    </div>
+                                                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
+                                                        <span className="font-medium">Cheap Web Builder</span>
+                                                        {enrichment?.uxDecay?.usesCheapBuilder ? <XCircle className="h-4 w-4 text-red-500" /> : <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+                </SheetContent>
+            </Sheet>
         </div>
     );
 }

@@ -1,7 +1,65 @@
 import * as cheerio from 'cheerio';
 
+// ============================================================
+// ENRICHMENT DATA INTERFACE (Phase 1 - Extraction Only)
+// ============================================================
+
+export interface EnrichmentData {
+    contacts: {
+        emails: { email: string; source: 'mailto' | 'regex'; type: 'personal' | 'generic' }[];
+        hasContactForm: boolean;
+        hasPhone: boolean;
+    };
+    seo: {
+        h1Tags: { count: number; texts: string[] };
+        titleTag: { text: string; isEmpty: boolean };
+        metaDescription: { exists: boolean; content: string };
+        hasViewport: boolean;
+        hasNoIndex: boolean;
+        hasSchemaMarkup: boolean;
+    };
+    pixels: {
+        hasMetaPixel: boolean;
+        hasGoogleAds: boolean;
+    };
+    expansionKeywords: string[];
+    ctas: {
+        hasGeneralCTA: boolean;
+        bookingUrls: { platform: string; url: string }[];
+    };
+    socials: {
+        instagram: { url: string; handle: string } | null;
+        facebook: { url: string } | null;
+        tiktok: { url: string } | null;
+    };
+    uxDecay: {
+        copyrightYear: number | null;
+        isOutdatedCopyright: boolean;
+        usesCheapBuilder: boolean;
+    };
+}
+
+// ============================================================
+// SCORE BREAKDOWN (100-Point Engine)
+// ============================================================
+
+export interface ScoreBreakdown {
+    total: number;
+    uxDecayTechnical: number;   // Category 1: max 45 pts
+    cashFlowMaturity: number;   // Category 2: max 30 pts
+    contactability: number;     // Category 3: max 25 pts
+    rulesTriggered: string[];   // Which rules fired (for UI display)
+}
+
+// ============================================================
+// SCRAPE RESULT
+// ============================================================
+
 export interface ScrapeResult {
     url: string;
+    // New 100-point scoring
+    scoreBreakdown: ScoreBreakdown;
+    // Legacy field mappings (for backward compat with scores table / enrichment-worker)
     contactabilityScore: number;
     seoScore: number;
     localIntentScore: number;
@@ -17,221 +75,598 @@ export interface ScrapeResult {
         has_schema: boolean;
     };
     biggestWeakness: string;
+    enrichment: EnrichmentData;
 }
 
-const GENERIC_PREFIXES = ['info', 'contact', 'support', 'hello', 'admin', 'sales', 'office', 'help'];
+// ============================================================
+// CONSTANTS
+// ============================================================
 
-export async function scrapeWebsite(url: string, city: string, niche: string, reviewCount: number = 0, reviewAvg: number = 0): Promise<ScrapeResult> {
-    let html = '';
-    let contactHtml = '';
+const GENERIC_EMAIL_PREFIXES = ['info', 'contact', 'support', 'hello', 'admin', 'sales', 'office', 'help'];
 
-    // Helper to safely fetch with timeout
-    const safeFetch = async (targetUrl: string) => {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
-            const response = await fetch(targetUrl, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
-            clearTimeout(timeoutId);
-            if (response.ok) return await response.text();
-        } catch (e) {
-            console.error(`Failed to fetch ${targetUrl}:`, e);
+const EXPANSION_KEYWORDS = ['careers', 'locations', 'service area', 'commercial', 'corporate', 'team', 'coaches', 'programs', 'events', 'retreats'];
+
+const CTA_KEYWORDS = ['book', 'call', 'schedule', 'quote', 'buy'];
+
+const BOOKING_PLATFORMS: Record<string, string> = {
+    'calendly.com': 'Calendly',
+    'acuityscheduling.com': 'Acuity',
+    'simplybook.me': 'SimplyBook',
+    'square.site': 'Square',
+    'mindbodyonline.com': 'Mindbody',
+    'janeapp.com': 'Jane',
+    'vagaro.com': 'Vagaro',
+    'glofox.com': 'Glofox',
+    'pike13.com': 'Pike13',
+};
+
+const CHEAP_BUILDERS = ['weebly.com', 'mysite.com', 'wixsite.com', 'godaddy.com/websites', 'yolasite.com', 'homestead.com', 'squarespace.com'];
+
+// ============================================================
+// HELPER: Safe fetch with timeout
+// ============================================================
+
+async function safeFetch(targetUrl: string): Promise<string> {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(targetUrl, {
+            signal: controller.signal,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+        });
+        clearTimeout(timeoutId);
+        if (response.ok) return await response.text();
+    } catch (e) {
+        console.error(`Failed to fetch ${targetUrl}:`, e);
+    }
+    return '';
+}
+
+// ============================================================
+// EXTRACTION FUNCTIONS
+// ============================================================
+
+function extractContacts($: cheerio.CheerioAPI, rawHtml: string): EnrichmentData['contacts'] {
+    const emailRegex = /[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+/gi;
+    const seenEmails = new Set<string>();
+    const emails: EnrichmentData['contacts']['emails'] = [];
+
+    // 1. Extract mailto: hrefs
+    $('a[href^="mailto:"]').each((_, el) => {
+        const href = $(el).attr('href') || '';
+        const email = href.replace('mailto:', '').split('?')[0].toLowerCase().trim();
+        if (email && !seenEmails.has(email)) {
+            seenEmails.add(email);
+            const prefix = email.split('@')[0];
+            emails.push({
+                email,
+                source: 'mailto',
+                type: GENERIC_EMAIL_PREFIXES.includes(prefix) ? 'generic' : 'personal',
+            });
         }
-        return '';
+    });
+
+    // 2. Regex scan on body text
+    let match;
+    while ((match = emailRegex.exec(rawHtml)) !== null) {
+        const email = match[0].toLowerCase();
+        // Filter out image filenames and tracking domains
+        if (email.endsWith('.png') || email.endsWith('.jpg') || email.endsWith('.webp') ||
+            email.endsWith('.svg') || email.endsWith('.gif') || email.includes('sentry.io') ||
+            email.includes('example.com')) continue;
+        if (!seenEmails.has(email)) {
+            seenEmails.add(email);
+            const prefix = email.split('@')[0];
+            emails.push({
+                email,
+                source: 'regex',
+                type: GENERIC_EMAIL_PREFIXES.includes(prefix) ? 'generic' : 'personal',
+            });
+        }
+    }
+
+    // 3. Contact Form
+    const hasContactForm = $('form').length > 0;
+
+    // 4. Phone (tel: links)
+    const hasPhone = $('a[href^="tel:"]').length > 0;
+
+    return { emails, hasContactForm, hasPhone };
+}
+
+function extractSeo($: cheerio.CheerioAPI): EnrichmentData['seo'] {
+    // H1 Tags
+    const h1Texts: string[] = [];
+    $('h1').each((_, el) => {
+        const text = $(el).text().trim();
+        if (text) h1Texts.push(text);
+    });
+
+    // Title Tag
+    const titleText = $('title').text().trim();
+
+    // Meta Description
+    const metaDescTag = $('meta[name="description"]');
+    const metaDescContent = metaDescTag.attr('content')?.trim() || '';
+
+    // Viewport
+    const hasViewport = $('meta[name="viewport"]').length > 0;
+
+    // NoIndex ("Fatal Flaw")
+    const hasNoIndex = $('meta[name="robots"][content*="noindex"]').length > 0;
+
+    // Schema Markup
+    const hasSchemaMarkup = $('script[type="application/ld+json"]').length > 0;
+
+    return {
+        h1Tags: { count: h1Texts.length, texts: h1Texts },
+        titleTag: { text: titleText, isEmpty: titleText.length === 0 },
+        metaDescription: { exists: metaDescTag.length > 0, content: metaDescContent },
+        hasViewport,
+        hasNoIndex,
+        hasSchemaMarkup,
+    };
+}
+
+function extractPixels($: cheerio.CheerioAPI, rawHtml: string): EnrichmentData['pixels'] {
+    const htmlLower = rawHtml.toLowerCase();
+
+    const hasMetaPixel = htmlLower.includes('connect.facebook.net') || htmlLower.includes('fbq(');
+    const hasGoogleAds = htmlLower.includes('googletagmanager.com') || htmlLower.includes('gtag(');
+
+    return { hasMetaPixel, hasGoogleAds };
+}
+
+function extractExpansionKeywords($: cheerio.CheerioAPI): string[] {
+    const found: string[] = [];
+    const navText = $('nav, header, [role="navigation"]').text().toLowerCase();
+    const allLinkText: string[] = [];
+
+    $('a').each((_, el) => {
+        const text = $(el).text().toLowerCase().trim();
+        const href = ($(el).attr('href') || '').toLowerCase();
+        allLinkText.push(text);
+        allLinkText.push(href);
+    });
+
+    const combined = navText + ' ' + allLinkText.join(' ');
+
+    for (const keyword of EXPANSION_KEYWORDS) {
+        if (combined.includes(keyword.toLowerCase())) {
+            found.push(keyword);
+        }
+    }
+
+    return found;
+}
+
+function extractCtas($: cheerio.CheerioAPI): EnrichmentData['ctas'] {
+    let hasGeneralCTA = false;
+    const bookingUrls: { platform: string; url: string }[] = [];
+    const seenBookingUrls = new Set<string>();
+
+    // Collect all hrefs from <a> tags and src from <iframe> tags
+    const allUrls: string[] = [];
+    $('a[href]').each((_, el) => {
+        allUrls.push(($(el).attr('href') || '').toLowerCase());
+    });
+    $('iframe[src]').each((_, el) => {
+        allUrls.push(($(el).attr('src') || '').toLowerCase());
+    });
+
+    for (const url of allUrls) {
+        // General CTA check
+        if (!hasGeneralCTA) {
+            for (const kw of CTA_KEYWORDS) {
+                if (url.includes(kw)) {
+                    hasGeneralCTA = true;
+                    break;
+                }
+            }
+        }
+
+        // Booking platform check
+        for (const [domain, platformName] of Object.entries(BOOKING_PLATFORMS)) {
+            if (url.includes(domain) && !seenBookingUrls.has(domain)) {
+                seenBookingUrls.add(domain);
+                bookingUrls.push({ platform: platformName, url });
+            }
+        }
+    }
+
+    return { hasGeneralCTA, bookingUrls };
+}
+
+function extractSocials($: cheerio.CheerioAPI): EnrichmentData['socials'] {
+    let instagram: { url: string; handle: string } | null = null;
+    let facebook: { url: string } | null = null;
+    let tiktok: { url: string } | null = null;
+
+    $('a[href]').each((_, el) => {
+        const href = $(el).attr('href') || '';
+        const hrefLower = href.toLowerCase();
+
+        // Instagram
+        if (!instagram && hrefLower.includes('instagram.com/')) {
+            const handleMatch = href.match(/instagram\.com\/([a-zA-Z0-9._]+)/i);
+            instagram = {
+                url: href,
+                handle: handleMatch ? handleMatch[1] : '',
+            };
+        }
+
+        // Facebook
+        if (!facebook && hrefLower.includes('facebook.com/')) {
+            facebook = { url: href };
+        }
+
+        // TikTok
+        if (!tiktok && hrefLower.includes('tiktok.com/')) {
+            tiktok = { url: href };
+        }
+    });
+
+    return { instagram, facebook, tiktok };
+}
+
+function extractUxDecay($: cheerio.CheerioAPI, rawHtml: string): EnrichmentData['uxDecay'] {
+    // 1. Outdated Copyright
+    const copyrightRegex = /(?:©|Copyright)\s*(?:[0-9]{4}-)?([0-9]{4})/i;
+    // Prefer footer, fall back to body
+    const footerText = $('footer').text();
+    const searchText = footerText || rawHtml;
+    const copyrightMatch = searchText.match(copyrightRegex);
+    const copyrightYear = copyrightMatch ? parseInt(copyrightMatch[1], 10) : null;
+    const isOutdatedCopyright = copyrightYear !== null && copyrightYear <= 2024;
+
+    // 2. Cheap Web Builder
+    const htmlLower = rawHtml.toLowerCase();
+    const usesCheapBuilder = CHEAP_BUILDERS.some(b => htmlLower.includes(b));
+
+    return { copyrightYear, isOutdatedCopyright, usesCheapBuilder };
+}
+
+// ============================================================
+// SMART ROUTING: Find up to 2 contact/about sub-pages
+// ============================================================
+
+const ROUTE_HREF_REGEX = /(contact|about|team|connect|reach|touch|staff|profile|location)/i;
+const ROUTE_ANCHOR_TEXTS = ['contact', 'get in touch', 'reach us', 'about us', 'our team', 'meet the team', 'staff', 'find us', 'locations'];
+
+function findSubPageUrls($: cheerio.CheerioAPI, baseUrl: string): string[] {
+    const candidates = new Set<string>();
+
+    // Gather links from semantic sections first, fall back to body
+    const sections = $('nav a, header a, footer a');
+    const linksToScan = sections.length > 0 ? sections : $('body a');
+
+    linksToScan.each((_, el) => {
+        const href = $(el).attr('href') || '';
+        const anchorText = $(el).text().toLowerCase().trim();
+
+        if (!href || href === '#' || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) return;
+
+        const hrefMatch = ROUTE_HREF_REGEX.test(href);
+        const textMatch = ROUTE_ANCHOR_TEXTS.some(t => anchorText.includes(t));
+
+        if (hrefMatch || textMatch) {
+            try {
+                const resolvedUrl = new URL(href, baseUrl).toString();
+                // Only follow same-origin links
+                if (new URL(resolvedUrl).origin === new URL(baseUrl).origin) {
+                    candidates.add(resolvedUrl);
+                }
+            } catch {
+                // invalid URL
+            }
+        }
+    });
+
+    // Return max 2 unique URLs
+    return Array.from(candidates).slice(0, 2);
+}
+
+// ============================================================
+// LIGHT EXTRACTION (for sub-pages — contact/conversion data only)
+// ============================================================
+
+interface LightExtraction {
+    emails: EnrichmentData['contacts']['emails'];
+    hasContactForm: boolean;
+    hasPhone: boolean;
+    socials: EnrichmentData['socials'];
+    ctas: EnrichmentData['ctas'];
+}
+
+function extractLight($: cheerio.CheerioAPI, rawHtml: string): LightExtraction {
+    const contacts = extractContacts($, rawHtml);
+    const socials = extractSocials($);
+    const ctas = extractCtas($);
+
+    return {
+        emails: contacts.emails,
+        hasContactForm: contacts.hasContactForm,
+        hasPhone: contacts.hasPhone,
+        socials,
+        ctas,
+    };
+}
+
+// ============================================================
+// MERGE HELPERS
+// ============================================================
+
+function mergeEmails(
+    base: EnrichmentData['contacts']['emails'],
+    incoming: EnrichmentData['contacts']['emails']
+): EnrichmentData['contacts']['emails'] {
+    const seen = new Set(base.map(e => e.email));
+    const merged = [...base];
+    for (const e of incoming) {
+        if (!seen.has(e.email)) {
+            seen.add(e.email);
+            merged.push(e);
+        }
+    }
+    return merged;
+}
+
+function mergeSocials(
+    base: EnrichmentData['socials'],
+    incoming: EnrichmentData['socials']
+): EnrichmentData['socials'] {
+    return {
+        instagram: base.instagram || incoming.instagram,
+        facebook: base.facebook || incoming.facebook,
+        tiktok: base.tiktok || incoming.tiktok,
+    };
+}
+
+function mergeCtas(
+    base: EnrichmentData['ctas'],
+    incoming: EnrichmentData['ctas']
+): EnrichmentData['ctas'] {
+    const seenPlatforms = new Set(base.bookingUrls.map(b => b.platform));
+    const mergedBooking = [...base.bookingUrls];
+    for (const b of incoming.bookingUrls) {
+        if (!seenPlatforms.has(b.platform)) {
+            seenPlatforms.add(b.platform);
+            mergedBooking.push(b);
+        }
+    }
+    return {
+        hasGeneralCTA: base.hasGeneralCTA || incoming.hasGeneralCTA,
+        bookingUrls: mergedBooking,
+    };
+}
+
+// ============================================================
+// MAIN SCRAPE FUNCTION
+// ============================================================
+
+export async function scrapeWebsite(
+    url: string,
+    city: string,
+    niche: string,
+    reviewCount: number = 0,
+    reviewAvg: number = 0
+): Promise<ScrapeResult> {
+    // ============================
+    // STEP 1: THE HOMEPAGE SWEEP
+    // ============================
+    const homepageHtml = await safeFetch(url);
+    const homepage$ = cheerio.load(homepageHtml || '<html lang="en"><body></body></html>');
+
+    // Full extraction on homepage
+    let contacts = extractContacts(homepage$, homepageHtml);
+    const seo = extractSeo(homepage$);
+    const pixels = extractPixels(homepage$, homepageHtml);
+    const expansionKeywords = extractExpansionKeywords(homepage$);
+    let ctas = extractCtas(homepage$);
+    let socials = extractSocials(homepage$);
+    const uxDecay = extractUxDecay(homepage$, homepageHtml);
+
+    // ============================
+    // STEP 2: SMART ROUTING
+    // ============================
+    const subPageUrls = findSubPageUrls(homepage$, url);
+
+    // ============================
+    // STEP 3: THE DEEP DIVE (contact/conversion data only)
+    // ============================
+    for (const subUrl of subPageUrls) {
+        const subHtml = await safeFetch(subUrl);
+        if (!subHtml) continue;
+        const sub$ = cheerio.load(subHtml);
+        const light = extractLight(sub$, subHtml);
+
+        // ============================
+        // STEP 4: MERGE & DEDUPLICATE
+        // ============================
+        contacts = {
+            emails: mergeEmails(contacts.emails, light.emails),
+            hasContactForm: contacts.hasContactForm || light.hasContactForm,
+            hasPhone: contacts.hasPhone || light.hasPhone,
+        };
+        socials = mergeSocials(socials, light.socials);
+        ctas = mergeCtas(ctas, light.ctas);
+    }
+
+    // ============================
+    // BUILD FINAL ENRICHMENT DATA
+    // ============================
+    const enrichment: EnrichmentData = {
+        contacts,
+        seo,
+        pixels,
+        expansionKeywords,
+        ctas,
+        socials,
+        uxDecay,
     };
 
-    // 1. Fetch Homepage
-    html = await safeFetch(url);
-    const $ = cheerio.load(html || '<html lang="en"><body></body></html>');
+    // ============================
+    // 100-POINT SCORING ENGINE
+    // ============================
+    const scoreBreakdown = calculateLeadScore(enrichment, { url, reviewCount, reviewAvg });
 
-    // 2. Look for Contact Page
-    let contactHref = '';
-    $('a').each((_, el) => {
-        const h = $(el).attr('href');
-        if (h && (h.toLowerCase().includes('contact') || h.toLowerCase().includes('kontak') || h.toLowerCase().includes('impressum'))) {
-            if (!contactHref) contactHref = h; // grab the first one
-        }
-    });
+    // Legacy field mappings (for scores table: score_overall, score_contactability, score_seo, score_local_intent, score_fit)
+    const has_booking_link = ctas.hasGeneralCTA || ctas.bookingUrls.length > 0;
 
-    // 3. Fetch Contact Page if found
-    if (contactHref) {
-        try {
-            const contactUrl = new URL(contactHref, url).toString();
-            contactHtml = await safeFetch(contactUrl);
-        } catch (e) {
-            // invalid URL construct
-        }
-    }
+    // Legacy socials array
+    const legacySocials: { platform: string; url: string }[] = [];
+    if (socials.instagram) legacySocials.push({ platform: 'instagram', url: socials.instagram.url });
+    if (socials.facebook) legacySocials.push({ platform: 'facebook', url: socials.facebook.url });
+    if (socials.tiktok) legacySocials.push({ platform: 'tiktok', url: socials.tiktok.url });
 
-    // Combine text and HTML for analysis
-    const combinedHtml = html + ' ' + contactHtml;
-    const combined$ = cheerio.load(combinedHtml || '<html lang="en"><body></body></html>');
-    const textContent = combined$('body').text().toLowerCase();
+    // Legacy emails array
+    const legacyEmails = contacts.emails.map(e => ({ email: e.email, type: e.type }));
 
-    // ==========================================
-    // 1. CONTACTABILITY (0 - 6 pts)
-    // ==========================================
-    let contactabilityScore = 0;
-
-    // Extract emails
-    const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi;
-    const foundEmails = new Set<string>();
-    const emails: { email: string; type: 'personal' | 'generic' }[] = [];
-
-    let match;
-    while ((match = emailRegex.exec(html)) !== null) {
-        const e = match[1].toLowerCase();
-        // basic filter to prevent grabbing image names like logo@2x.png
-        if (e.endsWith('.png') || e.endsWith('.jpg') || e.endsWith('.webp') || e.endsWith('.svg') || e.endsWith('sentry.io')) continue;
-        foundEmails.add(e);
-    }
-
-    let hasPersonal = false;
-    const hasEmail = foundEmails.size > 0;
-
-    foundEmails.forEach(email => {
-        const prefix = email.split('@')[0];
-        if (GENERIC_PREFIXES.includes(prefix)) {
-            emails.push({ email, type: 'generic' });
-        } else {
-            hasPersonal = true;
-            emails.push({ email, type: 'personal' });
-        }
-    });
-
-    if (hasPersonal) {
-        contactabilityScore += 3; // +3 Points: If a personal-looking email is found
-    }
-
-    if (hasEmail) {
-        contactabilityScore += 2; // +2 Points: If ANY email is found.
-    }
-
-    // Has Contact Form
-    const hasForm = combined$('form').length > 0 || combined$('a[href*="contact"]').length > 0;
-    if (hasForm && !hasEmail) {
-        contactabilityScore += 1; // +1 Point: If only a contact form is present (no email found).
-    }
-
-    // ==========================================
-    // 2. THE SEO GAP (0 - 7 pts)
-    // ==========================================
-    let seoScore = 0;
-
-    // Has Booking Link
-    const has_booking_link = combined$('a[href*="calendly"], a[href*="acuity"], a[href*="book"], a[href*="schedule"], a[href*="pricing"]').length > 0;
-    if (!has_booking_link) {
-        seoScore += 3; // +3 Points: If a booking or pricing link is NOT detected.
-    }
-
-    // Has H1 and Title Check
-    const has_h1 = combined$('h1').length > 0;
-    const title = combined$('title').text() || '';
-    const has_title = title.trim().length > 5; // consider < 5 chars poor
-
-    if (!has_h1 || !has_title) {
-        seoScore += 2; // +2 Points: missing basics (no <h1> tag OR a poor/empty <title> tag)
-    }
-
-    // Has Schema.org / JSON-LD
-    let has_schema = false;
-    combined$('script[type="application/ld+json"]').each((_, el) => {
-        try {
-            const jsonText = combined$(el).html();
-            if (jsonText && (jsonText.includes('Organization') || jsonText.includes('LocalBusiness'))) {
-                has_schema = true;
-            }
-        } catch (e) { }
-    });
-
-    if (!has_schema) {
-        seoScore += 1; // +1 Point: missing schema.org tags for Organization or Local Business.
-    }
-
-    // Under 20 reviews
-    if (reviewCount > 0 && reviewCount < 20) {
-        seoScore += 1; // +1 Point: Google rating_count is less than 20.
-    }
-
-    // ==========================================
-    // 3. LOCAL INTENT (0 - 4 pts)
-    // ==========================================
-    let localIntentScore = 0;
-
-    if (niche && textContent.includes(niche.toLowerCase())) {
-        localIntentScore += 2; // +2 Points: scraper detected exact intent keywords
-    }
-
-    if (city && textContent.includes(city.toLowerCase())) {
-        localIntentScore += 1; // +1 Point: specific city name is present on homepage
-    }
-
-    if (reviewCount > 0 && reviewAvg < 4.5) {
-        localIntentScore += 1; // +1 Point: business profile exists but rating < 4.5
-    }
-
-    // ==========================================
-    // 4. BUSINESS FIT (0 - 3 pts)
-    // ==========================================
-    let fitScore = 0;
-
-    if (reviewCount >= 30) {
-        fitScore += 2; // +2 Points: Google rating_count is greater than or equal to 30.
-    }
-
-    // Multiple programs / services
-    const serviceKeywords = ['services', 'programs', 'classes', 'camps', 'private', 'group'];
-    let servicesFound = 0;
-    serviceKeywords.forEach(kw => {
-        if (textContent.includes(kw)) servicesFound++;
-    });
-
-    if (servicesFound > 1) {
-        fitScore += 1; // +1 Point: multiple programs or services are detected
-    }
-
-    // SOCIALS
-    const socials: { platform: string; url: string }[] = [];
-    combined$('a[href]').each((_, el) => {
-        const href = $(el).attr('href') || '';
-        if (href.includes('instagram.com') && !socials.find(s => s.platform === 'instagram')) socials.push({ platform: 'instagram', url: href });
-        if (href.includes('facebook.com') && !socials.find(s => s.platform === 'facebook')) socials.push({ platform: 'facebook', url: href });
-        if (href.includes('twitter.com') || href.includes('x.com')) {
-            if (!socials.find(s => s.platform === 'x')) socials.push({ platform: 'x', url: href });
-        }
-        if (href.includes('tiktok.com') && !socials.find(s => s.platform === 'tiktok')) socials.push({ platform: 'tiktok', url: href });
-        if (href.includes('youtube.com') && !socials.find(s => s.platform === 'youtube')) socials.push({ platform: 'youtube', url: href });
-    });
-
-    // Calculate Biggest Weakness for the UI
-    let biggestWeakness = "Solid Digital Presence";
-    if (!has_booking_link) {
-        biggestWeakness = "🔴 No Booking Link";
-    } else if (!has_h1) {
-        biggestWeakness = "🔴 Missing H1 Tag";
-    } else if (!has_schema) {
-        biggestWeakness = "🔴 Lacking SEO Schema";
-    } else if (!has_title || title.length < 10) {
-        biggestWeakness = "🔴 Poor Title Tag";
-    } else if (reviewCount > 0 && reviewCount < 10) {
-        biggestWeakness = "🔴 Low Review Count";
+    // Biggest weakness (derived from highest-weight triggered rule)
+    let biggestWeakness = 'Solid Digital Presence';
+    if (scoreBreakdown.rulesTriggered.length > 0) {
+        biggestWeakness = `🔴 ${scoreBreakdown.rulesTriggered[0]}`;
     }
 
     return {
         url,
-        contactabilityScore: Math.min(contactabilityScore, 6),
-        seoScore: Math.min(seoScore, 7),
-        localIntentScore: Math.min(localIntentScore, 4),
-        fitScore: Math.min(fitScore, 3),
-        totalScore: Math.min(contactabilityScore, 6) + Math.min(seoScore, 7) + Math.min(localIntentScore, 4) + Math.min(fitScore, 3),
-        emails,
-        socials,
+        scoreBreakdown,
+        // Map new categories to legacy score columns
+        contactabilityScore: scoreBreakdown.contactability,
+        seoScore: scoreBreakdown.uxDecayTechnical,
+        localIntentScore: scoreBreakdown.cashFlowMaturity,
+        fitScore: 0,
+        totalScore: scoreBreakdown.total,
+        emails: legacyEmails,
+        socials: legacySocials,
         seoAudit: {
-            has_title,
-            title_len: title.length,
-            has_h1,
+            has_title: !seo.titleTag.isEmpty,
+            title_len: seo.titleTag.text.length,
+            has_h1: seo.h1Tags.count > 0,
             has_booking_link,
-            has_schema
+            has_schema: seo.hasSchemaMarkup,
         },
-        biggestWeakness
+        biggestWeakness,
+        enrichment,
     };
 }
+
+// ============================================================
+// 100-POINT SCORING ENGINE
+// ============================================================
+
+const GENERIC_PREFIXES = ['info', 'contact', 'admin', 'hello', 'support', 'sales', 'office'];
+
+interface GoogleData {
+    url: string;
+    reviewCount: number;
+    reviewAvg: number;
+}
+
+export function calculateLeadScore(data: EnrichmentData, google: GoogleData): ScoreBreakdown {
+    let total_score = 0;
+    const rulesTriggered: string[] = [];
+
+    // ============================
+    // CATEGORY 1: UX Decay & Technical Failure (Max 45)
+    // ============================
+    let uxDecayTechnical = 0;
+
+    // Rule 1: Outdated or Amateur UI (+10)
+    if (data.uxDecay.isOutdatedCopyright || data.uxDecay.usesCheapBuilder) {
+        uxDecayTechnical += 10;
+        rulesTriggered.push(data.uxDecay.usesCheapBuilder ? 'Cheap Web Builder Detected' : 'Outdated Copyright');
+    }
+
+    // Rule 2: Ghost Town / High Friction (+10)
+    const isTotallyIsolated = data.contacts.emails.length === 0 && !data.contacts.hasPhone && !data.contacts.hasContactForm;
+    if (isTotallyIsolated || !data.ctas.hasGeneralCTA) {
+        uxDecayTechnical += 10;
+        rulesTriggered.push(isTotallyIsolated ? 'Ghost Town (No Contact Methods)' : 'No CTA Keywords');
+    }
+
+    // Rule 3: Fatal Search Flaw (+10)
+    const isHttpNotSecure = google.url.startsWith('http://') && !google.url.startsWith('https://');
+    if (isHttpNotSecure || data.seo.hasNoIndex) {
+        uxDecayTechnical += 10;
+        rulesTriggered.push(data.seo.hasNoIndex ? 'NoIndex Detected (Fatal)' : 'HTTP Not Secure');
+    }
+
+    // Rule 4: Mobile Bounce (+10)
+    if (!data.seo.hasViewport) {
+        uxDecayTechnical += 10;
+        rulesTriggered.push('No Mobile Viewport');
+    }
+
+    // Rule 5: Structural SEO Failure (+5)
+    if (data.seo.h1Tags.count === 0 || data.seo.h1Tags.count > 1 || data.seo.titleTag.isEmpty) {
+        uxDecayTechnical += 5;
+        rulesTriggered.push(data.seo.titleTag.isEmpty ? 'Empty Title Tag' : `H1 Count: ${data.seo.h1Tags.count}`);
+    }
+
+    uxDecayTechnical = Math.min(uxDecayTechnical, 45);
+    total_score += uxDecayTechnical;
+
+    // ============================
+    // CATEGORY 2: Cash Flow & Maturity (Max 30)
+    // ============================
+    let cashFlowMaturity = 0;
+
+    // Rule 6: Active Ad Spender (+15)
+    if (data.pixels.hasMetaPixel || data.pixels.hasGoogleAds) {
+        cashFlowMaturity += 15;
+        rulesTriggered.push('Active Ad Spender');
+    }
+
+    // Rule 7: High Customer Volume (+10)
+    if (google.reviewCount >= 40) {
+        cashFlowMaturity += 10;
+        rulesTriggered.push(`High Review Volume (${google.reviewCount})`);
+    }
+
+    // Rule 8: Expansion & Payroll (+5)
+    if (data.expansionKeywords.length > 0) {
+        cashFlowMaturity += 5;
+        rulesTriggered.push(`Expansion Keywords: ${data.expansionKeywords.join(', ')}`);
+    }
+
+    cashFlowMaturity = Math.min(cashFlowMaturity, 30);
+    total_score += cashFlowMaturity;
+
+    // ============================
+    // CATEGORY 3: Contactability (Max 25)
+    // ============================
+    let contactability = 0;
+
+    // Rule 9: Direct Inbox Access (max 20, mutually exclusive tiers)
+    const hasPersonalEmail = data.contacts.emails.some(
+        e => !GENERIC_PREFIXES.some(prefix => e.email.toLowerCase().startsWith(prefix + '@'))
+    );
+    const hasAnyEmail = data.contacts.emails.length > 0;
+
+    if (hasPersonalEmail) {
+        contactability += 20;
+        rulesTriggered.push('Personal Email Found');
+    } else if (hasAnyEmail) {
+        contactability += 10;
+        rulesTriggered.push('Generic Email Only');
+    }
+
+    // Rule 10: Form Fallback (+5, stacks)
+    if (data.contacts.hasContactForm) {
+        contactability += 5;
+        rulesTriggered.push('Contact Form Available');
+    }
+
+    contactability = Math.min(contactability, 25);
+    total_score += contactability;
+
+    return {
+        total: Math.min(total_score, 100),
+        uxDecayTechnical,
+        cashFlowMaturity,
+        contactability,
+        rulesTriggered,
+    };
+}
+

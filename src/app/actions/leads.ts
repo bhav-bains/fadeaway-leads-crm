@@ -4,7 +4,19 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { scrapeWebsite } from '@/lib/scraper'
 
-export async function insertLead(leadData: { name: string, address: string, city: string, phone?: string, website?: string, niche?: string, reviewCount?: number }, scrapeResult?: Record<string, any>) {
+export async function insertLead(
+    leadData: { 
+        name: string; 
+        address: string; 
+        city: string; 
+        phone?: string; 
+        website?: string; 
+        niche?: string; 
+        reviewCount?: number; 
+        googlePlaceId?: string 
+    }, 
+    scrapeResult?: Record<string, any>
+) {
     const supabase = await createClient()
 
     // 1. Get current authenticated user
@@ -20,7 +32,10 @@ export async function insertLead(leadData: { name: string, address: string, city
         .eq('id', user.id)
         .single()
 
-    if (!profile || !profile.workspace_id) {
+    if (!profile) {
+        return { error: 'Profile not found' }
+    }
+    if (!profile.workspace_id) {
         return { error: 'No workspace found for user' }
     }
 
@@ -41,7 +56,21 @@ export async function insertLead(leadData: { name: string, address: string, city
     // 3. Search for Existing Match (Deduplication)
     let existingCompany = null;
 
-    if (normalizedWebsite || normalizedPhone) {
+    // A. Try matching by Google Place ID first (Source ID)
+    if (leadData.googlePlaceId) {
+        const { data: idMatch } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('workspace_id', profile.workspace_id)
+            .eq('source_id', leadData.googlePlaceId)
+            .limit(1)
+            .single();
+        
+        if (idMatch) existingCompany = idMatch;
+    }
+
+    // B. Fallback to Website/Phone match if no ID match found
+    if (!existingCompany && (normalizedWebsite || normalizedPhone)) {
         // Build OR query dynamically
         let matchQuery = '';
         if (normalizedWebsite && normalizedPhone) {
@@ -52,16 +81,15 @@ export async function insertLead(leadData: { name: string, address: string, city
             matchQuery = `phone.ilike.%${normalizedPhone}%`;
         }
 
-        const { data: matches, error: matchError } = await supabase
+        const { data: matches } = await supabase
             .from('companies')
             .select('*')
             .eq('workspace_id', profile.workspace_id)
             .or(matchQuery)
             .limit(1);
 
-        if (!matchError && matches && matches.length > 0) {
+        if (matches && matches.length > 0) {
             existingCompany = matches[0];
-            console.log(`[Deduplication] Blocked insertion. Found existing match for ${leadData.name} via Domain/Phone.`);
         }
     }
 
@@ -70,16 +98,16 @@ export async function insertLead(leadData: { name: string, address: string, city
     let companyError;
 
     if (existingCompany) {
-        // Upsert Scenario: Only update fresh scraped data, never ruin their pipeline status
+        // Upsert Scenario
         const { data: updatedCompany, error: upError } = await supabase
             .from('companies')
             .update({
-                name: leadData.name, // Refresh name
-                address: leadData.address,
+                name: leadData.name,
+                street: leadData.address,
                 city: leadData.city,
                 phone: leadData.phone || existingCompany.phone,
                 website: leadData.website || existingCompany.website,
-                // Do NOT touch 'status' or 'created_at' to preserve pipeline integrity
+                source_id: leadData.googlePlaceId || existingCompany.source_id,
             })
             .eq('id', existingCompany.id)
             .select()
@@ -94,10 +122,11 @@ export async function insertLead(leadData: { name: string, address: string, city
             .insert([{
                 workspace_id: profile.workspace_id,
                 name: leadData.name,
-                address: leadData.address,
+                street: leadData.address,
                 city: leadData.city,
                 phone: leadData.phone,
                 website: leadData.website,
+                source_id: leadData.googlePlaceId,
                 status: 'New'
             }])
             .select()
@@ -113,9 +142,12 @@ export async function insertLead(leadData: { name: string, address: string, city
     }
 
     const companyId = company.id;
+    console.log(`[Database] Successfully ${existingCompany ? 'updated' : 'inserted'} company: ${company.name} (${companyId}) in workspace ${profile.workspace_id}`);
 
     // 5. Save or Update SEO Audit Results
     if (scrapeResult) {
+        console.log(`[Database] Saving audit data for company ${companyId}...`);
+
         // Wipe existing child rows cleanly rather than crafting complex merging logic per table
         // This simulates a fresh "Upsert" of the audit data every time we re-scrape.
         if (existingCompany) {
@@ -132,7 +164,8 @@ export async function insertLead(leadData: { name: string, address: string, city
             title_len: scrapeResult.seoAudit?.title_len || 0,
             has_h1: scrapeResult.seoAudit?.has_h1 || false,
             has_booking_link: scrapeResult.seoAudit?.has_booking_link || false,
-            schema_org_types: scrapeResult.seoAudit?.has_schema ? ['Found'] : []
+            schema_org_types: scrapeResult.seoAudit?.has_schema ? ['Found'] : [],
+            top_keywords_found: scrapeResult.enrichment?.expansionKeywords || []
         }]);
 
         // Insert fresh Scores
@@ -182,7 +215,13 @@ export async function insertLead(leadData: { name: string, address: string, city
     return { data: { company, scrapeResult } }
 }
 
-export async function runLocalSeoAudit(website: string, city: string, niche: string, ratingCount: number) {
+export async function runLocalSeoAudit(
+    website: string,
+    city: string,
+    niche: string,
+    ratingCount: number,
+    leadMeta?: { name: string; address: string; phone?: string; reviewCount?: number; googlePlaceId?: string }
+) {
     let urlToScrape = website;
     if (urlToScrape && !urlToScrape.startsWith('http')) {
         urlToScrape = `https://${urlToScrape}`;
@@ -194,6 +233,31 @@ export async function runLocalSeoAudit(website: string, city: string, niche: str
 
     try {
         const scrape = await scrapeWebsite(urlToScrape, city, niche, ratingCount);
+
+        // Auto-save audit to Supabase if we have lead metadata
+        if (leadMeta) {
+            console.log(`[AutoSave] Starting database persistence for ${leadMeta.name}...`);
+            const result = await insertLead(
+                {
+                    name: leadMeta.name,
+                    address: leadMeta.address,
+                    city,
+                    phone: leadMeta.phone,
+                    website,
+                    niche,
+                    reviewCount: leadMeta.reviewCount,
+                    googlePlaceId: leadMeta.googlePlaceId
+                },
+                scrape as unknown as Record<string, any>
+            );
+
+            if (result.error) {
+                console.error(`[AutoSave] FAILED: ${result.error}`);
+            } else {
+                console.log(`[AutoSave] SUCCESS: Data persisted for ${leadMeta.name}`);
+            }
+        }
+
         return {
             data: {
                 score: scrape.totalScore,
@@ -208,6 +272,7 @@ export async function runLocalSeoAudit(website: string, city: string, niche: str
         return { error: error.message || 'Failed to scrape website', score: 0, email: '', biggestWeakness: '🔴 Audit Failed', bookingDetected: false };
     }
 }
+
 
 export async function fetchLeads() {
     const supabase = await createClient()
