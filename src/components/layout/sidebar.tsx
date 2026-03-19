@@ -16,7 +16,7 @@ import { useState } from "react";
 
 const navigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Lead Finder", href: "/lead-finder", icon: Search },
+    { name: "Leads", href: "/lead-finder", icon: Search },
     { name: "Pipeline", href: "/pipeline", icon: Users },
     { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -32,29 +32,35 @@ export function Sidebar({ className }: SidebarProps) {
     return (
         <div
             className={cn(
-                "relative flex h-screen flex-col border-r bg-background transition-all duration-300",
+                "relative flex h-screen flex-col border-r border-zinc-800/50 bg-zinc-950 transition-all duration-300 overflow-hidden font-sans",
                 isCollapsed ? "w-[80px]" : "w-64",
                 className
             )}
         >
-            <div className="flex h-14 items-center border-b px-4 py-4 justify-between">
+            {/* Texture overlays - subtle */}
+            <div className="absolute inset-0 bg-[radial-gradient(#ffffff05_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none"></div>
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay pointer-events-none"></div>
+
+            <div className="relative z-10 flex h-16 items-center border-b border-zinc-800/30 px-6 justify-between">
                 {!isCollapsed && (
-                    <div className="flex items-center gap-2 font-semibold">
-                        <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Fadeaway</span>
-                    </div>
+                    <Link href="/" className="flex items-center gap-2 group">
+                        <span className="text-xl font-heading font-black tracking-tighter text-white group-hover:text-brand transition-colors uppercase">
+                            Fadeaway<span className="text-brand ml-0.5">.</span>
+                        </span>
+                    </Link>
                 )}
                 <Button
                     variant="ghost"
                     size="icon"
-                    className={cn("h-8 w-8", isCollapsed && "mx-auto")}
+                    className={cn("h-8 w-8 text-zinc-500 hover:text-white hover:bg-zinc-900", isCollapsed && "mx-auto")}
                     onClick={() => setIsCollapsed(!isCollapsed)}
                 >
                     {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
                 </Button>
             </div>
 
-            <div className="flex-1 overflow-auto py-2">
-                <nav className="grid gap-1 px-2">
+            <div className="relative z-10 flex-1 overflow-auto py-6">
+                <nav className="grid gap-1.5 px-3">
                     {navigation.map((item) => {
                         const isActive = pathname === item.href;
                         return (
@@ -62,12 +68,14 @@ export function Sidebar({ className }: SidebarProps) {
                                 key={item.name}
                                 href={item.href}
                                 className={cn(
-                                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground",
-                                    isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+                                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all group",
+                                    isActive 
+                                        ? "bg-zinc-900 text-brand shadow-sm border border-zinc-800/50" 
+                                        : "text-zinc-400 hover:text-white hover:bg-zinc-900/50",
                                     isCollapsed && "justify-center px-0"
                                 )}
                             >
-                                <item.icon className="h-4 w-4" />
+                                <item.icon className={cn("h-4 w-4 transition-colors", isActive ? "text-brand" : "group-hover:text-white")} />
                                 {!isCollapsed && <span>{item.name}</span>}
                             </Link>
                         );
@@ -75,17 +83,17 @@ export function Sidebar({ className }: SidebarProps) {
                 </nav>
             </div>
 
-            <div className="mt-auto border-t p-4">
+            <div className="relative z-10 mt-auto border-t border-zinc-800/30 p-4">
                 <form action={logout}>
                     <Button
                         type="submit"
                         variant="ghost"
                         className={cn(
-                            "w-full justify-start text-muted-foreground hover:text-foreground",
+                            "w-full justify-start text-zinc-400 hover:text-white hover:bg-zinc-900",
                             isCollapsed && "justify-center px-0"
                         )}
                     >
-                        <LogOut className="h-4 w-4 mr-2" />
+                        <LogOut className="h-4 w-4 mr-3" />
                         {!isCollapsed && <span>Log out</span>}
                     </Button>
                 </form>
@@ -100,18 +108,20 @@ export function MobileSidebar() {
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger className="md:hidden inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 w-10">
+            <SheetTrigger className="md:hidden inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-zinc-900 text-zinc-400 h-10 w-10">
                 <PanelLeftOpen className="h-5 w-5" />
                 <span className="sr-only">Toggle navigation menu</span>
             </SheetTrigger>
-            <SheetContent side="left" className="flex w-64 flex-col p-0">
-                <div className="flex h-14 items-center border-b px-4 py-4">
-                    <div className="flex items-center gap-2 font-semibold">
-                        <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Fadeaway</span>
-                    </div>
+            <SheetContent side="left" className="flex w-64 flex-col p-0 bg-zinc-950 border-r border-zinc-800/50">
+                <div className="flex h-16 items-center border-b border-zinc-800/30 px-6">
+                    <Link href="/" className="flex items-center gap-2">
+                        <span className="text-xl font-heading font-black tracking-tighter text-white uppercase">
+                            Fadeaway<span className="text-brand ml-0.5">.</span>
+                        </span>
+                    </Link>
                 </div>
-                <div className="flex-1 overflow-auto py-2">
-                    <nav className="grid gap-1 px-2">
+                <div className="flex-1 overflow-auto py-6">
+                    <nav className="grid gap-1.5 px-3">
                         {navigation.map((item) => {
                             const isActive = pathname === item.href;
                             return (
@@ -120,25 +130,27 @@ export function MobileSidebar() {
                                     href={item.href}
                                     onClick={() => setOpen(false)}
                                     className={cn(
-                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground",
-                                        isActive ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+                                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all group",
+                                        isActive 
+                                            ? "bg-zinc-900 text-brand border border-zinc-800/50" 
+                                            : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
                                     )}
                                 >
-                                    <item.icon className="h-4 w-4" />
+                                    <item.icon className={cn("h-4 w-4", isActive ? "text-brand" : "group-hover:text-white")} />
                                     {item.name}
                                 </Link>
                             );
                         })}
                     </nav>
                 </div>
-                <div className="mt-auto border-t p-4">
+                <div className="mt-auto border-t border-zinc-800/30 p-4">
                     <form action={logout}>
                         <Button
                             type="submit"
                             variant="ghost"
-                            className="w-full justify-start text-muted-foreground hover:text-foreground"
+                            className="w-full justify-start text-zinc-400 hover:text-white hover:bg-zinc-900"
                         >
-                            <LogOut className="h-4 w-4 mr-2" />
+                            <LogOut className="h-4 w-4 mr-3" />
                             Log out
                         </Button>
                     </form>

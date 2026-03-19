@@ -10,7 +10,7 @@ export default async function Home() {
     redirect('/login');
   }
 
-  // Fetch all companies (RLS protects it to the user's workspace)
+  // Fetch all companies
   const { data: companies } = await supabase
     .from('companies')
     .select(`
@@ -20,20 +20,14 @@ export default async function Home() {
     .order('created_at', { ascending: false });
 
   const safeCompanies = companies || [];
-
-  // ================= METRICS MATH =================
   const now = new Date();
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(now.getDate() - 7);
 
   const sourcedThisWeek = safeCompanies.filter(c => new Date(c.created_at) >= oneWeekAgo).length;
   const meetingsBooked = safeCompanies.filter(c => c.status === 'Booked').length;
+  const projectedRevenue = meetingsBooked * 2500;
 
-  // Projected Pipeline: assume $2,500 per meeting booked
-  const expectedValuePerMeeting = 2500;
-  const projectedRevenue = meetingsBooked * expectedValuePerMeeting;
-
-  // ================= PIPELINE SUMMARY =================
   const statusCounts: Record<string, number> = {};
   safeCompanies.forEach(c => {
     const status = c.status || 'New';
@@ -41,115 +35,156 @@ export default async function Home() {
   });
 
   const pipelineStages = [
-    { name: 'New', count: statusCounts['New'] || 0, color: 'bg-blue-100 text-blue-700' },
-    { name: 'Contacted', count: statusCounts['Contacted'] || 0, color: 'bg-yellow-100 text-yellow-700' },
-    { name: 'Booked', count: statusCounts['Booked'] || 0, color: 'bg-green-100 text-green-700' },
-    { name: 'Closed', count: statusCounts['Closed'] || 0, color: 'bg-purple-100 text-purple-700' },
+    { name: 'New', count: statusCounts['New'] || 0, color: 'text-brand' },
+    { name: 'Contacted', count: statusCounts['Contacted'] || 0, color: 'text-brand' },
+    { name: 'Booked', count: statusCounts['Booked'] || 0, color: 'text-brand' },
+    { name: 'Closed', count: statusCounts['Closed'] || 0, color: 'text-brand' },
   ];
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Main Dashboard</h1>
-        <p className="text-muted-foreground mt-2">
-          Your pipeline and performance at a glance.
+    <div className="flex flex-col gap-10 font-sans relative">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-4xl lg:text-6xl font-heading font-black tracking-tighter uppercase">
+          Performance<span className="text-brand">.</span>
+        </h1>
+        <p className="text-zinc-400 text-base lg:text-lg">
+          Live performance metrics.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Sourced This Week</h3>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {/* Metric Card: New Leads */}
+        <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/40 p-6 shadow-sm backdrop-blur-sm relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">New Leads</h3>
+            <div className="bg-brand/10 p-2 rounded-lg group-hover:bg-brand/20 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4 text-brand"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+            </div>
           </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{sourcedThisWeek}</div>
-            <p className="text-xs text-muted-foreground">Rolling 7 days</p>
-          </div>
-        </div>
-
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Meetings Booked</h3>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>
-          </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{meetingsBooked}</div>
-            <p className="text-xs text-muted-foreground">Lifetime pipeline</p>
+          <div className="flex items-baseline gap-1">
+            <div className="text-4xl font-heading font-black">{sourcedThisWeek}</div>
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Sourced</div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Total Companies</h3>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        {/* Metric Card: Meetings */}
+        <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/40 p-6 shadow-sm backdrop-blur-sm relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Meetings</h3>
+            <div className="bg-brand/10 p-2 rounded-lg group-hover:bg-brand/20 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4 text-brand"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect><line x1="3" x2="21" y1="10" y2="10"></line></svg>
+            </div>
           </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{safeCompanies.length}</div>
-            <p className="text-xs text-muted-foreground">In your workspace</p>
+          <div className="flex items-baseline gap-1">
+            <div className="text-4xl font-heading font-black">{meetingsBooked}</div>
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Booked</div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Projected Revenue</h3>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" className="h-4 w-4 text-muted-foreground"><line x1="12" x2="12" y1="2" y2="22"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        {/* Metric Card: Total Leads */}
+        <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/40 p-6 shadow-sm backdrop-blur-sm relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Total Leads</h3>
+            <div className="bg-brand/10 p-2 rounded-lg group-hover:bg-brand/20 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4 text-brand"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+            </div>
           </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">${projectedRevenue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">$2.5k avg. per booked meeting</p>
+          <div className="flex items-baseline gap-1">
+            <div className="text-4xl font-heading font-black">{safeCompanies.length}</div>
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Verified</div>
+          </div>
+        </div>
+
+        {/* Metric Card: Pipeline Value */}
+        <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/40 p-6 shadow-sm backdrop-blur-sm relative overflow-hidden group">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-500">Pipeline Value</h3>
+            <div className="bg-brand/10 p-2 rounded-lg group-hover:bg-brand/20 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-4 w-4 text-brand"><line x1="12" x2="12" y1="2" y2="22"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1">
+            <div className="text-4xl font-heading font-black">${(projectedRevenue / 1000).toFixed(1)}k</div>
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Est. ROI</div>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <div className="rounded-xl border bg-card text-card-foreground shadow col-span-4">
-          <div className="flex flex-col space-y-1.5 p-6">
-            <h3 className="font-semibold leading-none tracking-tight">Recent New Leads</h3>
-            <p className="text-sm text-muted-foreground">Fresh companies waiting to be worked.</p>
+      <div className="grid gap-8 lg:grid-cols-7">
+        {/* Recent Leads Section */}
+        <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/20 backdrop-blur-sm col-span-4 overflow-hidden">
+          <div className="p-8 border-b border-zinc-800/50 flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <h3 className="text-xl font-heading font-bold uppercase">Recent Leads</h3>
+              <p className="text-xs text-zinc-500 font-medium tracking-wide">HIGH-PRIORITY PIPELINE ENTRY</p>
+            </div>
+            <button className="text-[10px] font-bold uppercase tracking-widest text-brand hover:underline">View All</button>
           </div>
-          <div className="p-6 pt-0">
-            <div className="space-y-4">
+          <div className="p-8">
+            <div className="space-y-6">
               {safeCompanies.filter(c => c.status === 'New').slice(0, 5).map(company => (
-                <div key={company.id} className="flex items-center gap-4 border-b pb-4 last:border-0 last:pb-0">
-                  <div className="bg-gray-100 text-gray-700 p-2 rounded-full">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <div key={company.id} className="flex items-center gap-6 group">
+                  <div className="h-10 w-10 bg-zinc-800/50 rounded-lg flex items-center justify-center text-zinc-400 group-hover:bg-brand/10 group-hover:text-brand transition-all border border-zinc-700/30">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 font-bold"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">{company.name}</p>
-                    <p className="text-xs text-muted-foreground">{company.city}{company.phone ? ` • ${company.phone}` : ''}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-heading font-bold text-lg truncate text-white">{company.name}</p>
+                    <p className="text-xs text-zinc-500 font-medium truncate uppercase tracking-wider">{company.city}{company.phone ? ` • ${company.phone}` : ''}</p>
                   </div>
-                  <Badge variant="outline" className="text-xs">{company.status}</Badge>
+                  <Badge variant="outline" className="text-xs font-black px-3 py-1 bg-zinc-800/30 border-zinc-700/50 uppercase tracking-tighter text-zinc-400">NEW</Badge>
                 </div>
               ))}
               {safeCompanies.filter(c => c.status === 'New').length === 0 && (
-                <div className="text-sm text-muted-foreground p-4 text-center border rounded-md bg-muted/20">
-                  No new leads waiting. Go find some!
+                <div className="text-sm text-zinc-500 p-12 text-center border border-dashed border-zinc-800 rounded-xl bg-zinc-900/10 uppercase font-black tracking-widest opacity-50">
+                  No new leads sourced.
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card text-card-foreground shadow col-span-3">
-          <div className="flex flex-col space-y-1.5 p-6 pb-4">
-            <h3 className="font-semibold leading-none tracking-tight">Pipeline Overview</h3>
+        {/* Pipeline Summary Section */}
+        <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/20 backdrop-blur-sm col-span-3 overflow-hidden flex flex-col">
+          <div className="p-8 border-b border-zinc-800/50">
+            <h3 className="text-xl font-heading font-bold uppercase italic tracking-tighter">Pipeline Core</h3>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Conversion Efficiency</p>
           </div>
-          <div className="p-6 pt-0">
-            <div className="space-y-5">
-              {pipelineStages.map((stage) => (
-                <div key={stage.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-sm ${stage.color}`}>
-                      {stage.count}
+          <div className="p-8 flex-1 flex flex-col justify-between">
+            <div className="space-y-8">
+              {pipelineStages.map((stage) => {
+                const percentage = safeCompanies.length > 0 ? Math.round((stage.count / safeCompanies.length) * 100) : 0;
+                return (
+                  <div key={stage.name} className="flex flex-col gap-2">
+                    <div className="flex items-end justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-black uppercase tracking-widest text-zinc-400">{stage.name}</span>
+                        <span className="text-[10px] font-bold text-brand uppercase">{stage.count} Units</span>
+                      </div>
+                      <span className="text-xs font-black text-white">{percentage}%</span>
                     </div>
-                    <p className="text-sm font-medium leading-none">{stage.name}</p>
+                    <div className="h-2 w-full bg-zinc-800/50 rounded-full overflow-hidden">
+                        <div 
+                            className="h-full bg-brand transition-all duration-500" 
+                            style={{ width: `${percentage}%` }}
+                        />
+                    </div>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    {safeCompanies.length > 0 ? Math.round((stage.count / safeCompanies.length) * 100) : 0}%
-                  </div>
+                );
+              })}
+            </div>
+
+            {/* High-Performance Advice */}
+            <div className="mt-12 p-6 rounded-xl bg-brand/5 border border-brand/10 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-12 w-12 text-brand"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
                 </div>
-              ))}
+                <div className="flex items-center gap-2 mb-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-brand animate-pulse"></div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-brand">Performance Advice</span>
+                </div>
+                <p className="text-xs italic text-zinc-400 leading-relaxed font-sans">
+                  "Your conversion rate is optimized. Increase outreach volume by 15% to hit next-tier targets."
+                </p>
             </div>
           </div>
         </div>
