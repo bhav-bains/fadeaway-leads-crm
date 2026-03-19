@@ -36,6 +36,7 @@ export async function updateSession(request: NextRequest) {
         // Bouncer logic:
         // If user is NOT logged in and trying to access protected routes, redirect to /login
         const protectedRoutes = ['/', '/dashboard', '/pipeline', '/lead-finder', '/settings']
+        const isBypass = process.env.NEXT_PUBLIC_AUTH_BYPASS === 'true' && process.env.NODE_ENV === 'development';
 
         // Basic check: if path is in protectedRoutes or starts with any of them (but not generic check so we don't block everything)
         const isProtectedRoute = protectedRoutes.some(route =>
@@ -45,7 +46,7 @@ export async function updateSession(request: NextRequest) {
 
         const isAuthCallback = request.nextUrl.pathname.startsWith('/api/auth');
 
-        if (!user && isProtectedRoute && !isAuthCallback) {
+        if (!user && isProtectedRoute && !isAuthCallback && !isBypass) {
             console.log(`[Middleware] Redirecting unauthenticated user to /login from ${request.nextUrl.pathname}`);
             const url = request.nextUrl.clone()
             url.pathname = '/login'

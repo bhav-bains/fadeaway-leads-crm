@@ -39,7 +39,7 @@ const TEMPLATES = {
     }
 };
 
-const KANBAN_STAGES = ['Audited', 'Contacted', 'Booked', 'Closed'];
+const KANBAN_STAGES = ['Audited', 'Contacted', 'Engaged', 'Booked', 'Closed'];
 
 function KanbanCard({ lead, onOpen }: { lead: Record<string, any>, onOpen: () => void }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: lead.id });

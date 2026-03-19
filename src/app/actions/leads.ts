@@ -140,16 +140,13 @@ export async function insertLead(
     }
 
     if (companyError || !company) {
-        console.error("Error saving company:", companyError)
         return { error: companyError?.message || "Failed to save company" }
     }
 
     const companyId = company.id;
-    console.log(`[Database] Successfully ${existingCompany ? 'updated' : 'inserted'} company: ${company.name} (${companyId}) in workspace ${profile.workspace_id}`);
 
     // 5. Save or Update SEO Audit Results
     if (scrapeResult) {
-        console.log(`[Database] Saving audit data for company ${companyId}...`);
 
         // Wipe existing child rows cleanly rather than crafting complex merging logic per table
         // This simulates a fresh "Upsert" of the audit data every time we re-scrape.
@@ -241,7 +238,6 @@ export async function runLocalSeoAudit(
 
         // Auto-save audit to Supabase if we have lead metadata
         if (leadMeta) {
-            console.log(`[AutoSave] Starting database persistence for ${leadMeta.name}...`);
             const result = await insertLead(
                 {
                     name: leadMeta.name,
@@ -257,9 +253,7 @@ export async function runLocalSeoAudit(
             );
 
             if (result.error) {
-                console.error(`[AutoSave] FAILED: ${result.error}`);
             } else {
-                console.log(`[AutoSave] SUCCESS: Data persisted for ${leadMeta.name}`);
                 if (result.data?.company) {
                     finalCompanyId = result.data.company.id;
                 }
@@ -298,7 +292,6 @@ export async function fetchLeads() {
         .order('created_at', { ascending: false })
 
     if (error) {
-        console.error("Error fetching leads:", error)
         return { error: error.message, data: [] }
     }
 
@@ -316,7 +309,6 @@ export async function updateLeadStatusAction(companyId: string, newStatus: strin
         .single()
 
     if (error) {
-        console.error("Error updating lead status:", error)
         return { error: error.message }
     }
 
@@ -352,7 +344,6 @@ export async function updateLeadManualData(
             .update(companyUpdate)
             .eq('id', companyId)
         if (error) {
-            console.error("Error updating manual data:", error)
             return { error: error.message }
         }
     }
@@ -436,7 +427,6 @@ export async function fetchLeadsPaginated(opts: {
     const { data: rawData, error, count } = await query;
 
     if (error) {
-        console.error("Error fetching paginated leads:", error);
         return { error: error.message, data: [], count: 0 };
     }
 
@@ -464,7 +454,6 @@ export async function fetchPipelineLeads() {
         .limit(200);
 
     if (error) {
-        console.error("Error fetching pipeline leads:", error);
         return { error: error.message, data: [] };
     }
 
@@ -478,7 +467,6 @@ export async function updateLeadStatus(companyId: string, status: string) {
         .eq('id', companyId)
 
     if (error) {
-        console.error("Error updating status:", error)
         return { error: error.message }
     }
 

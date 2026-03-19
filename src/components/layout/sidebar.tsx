@@ -41,7 +41,7 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="absolute inset-0 bg-[radial-gradient(#ffffff05_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none"></div>
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] mix-blend-overlay pointer-events-none"></div>
 
-            <div className="relative z-10 flex h-16 items-center border-b border-zinc-800/30 px-6 justify-between">
+            <div className="relative z-10 flex h-20 items-center border-b border-zinc-800/30 px-8 justify-between">
                 {!isCollapsed && (
                     <Link href="/" className="flex items-center gap-2 group">
                         <span className="text-xl font-heading font-black tracking-tighter text-white group-hover:text-brand transition-colors uppercase">
@@ -59,8 +59,8 @@ export function Sidebar({ className }: SidebarProps) {
                 </Button>
             </div>
 
-            <div className="relative z-10 flex-1 overflow-auto py-6">
-                <nav className="grid gap-1.5 px-3">
+            <div className="relative z-10 flex-1 overflow-auto py-8">
+                <nav className="grid gap-2 px-4">
                     {navigation.map((item) => {
                         const isActive = pathname === item.href;
                         return (
@@ -68,10 +68,10 @@ export function Sidebar({ className }: SidebarProps) {
                                 key={item.name}
                                 href={item.href}
                                 className={cn(
-                                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all group",
+                                    "flex items-center gap-4 rounded-xl px-4 py-3.5 text-sm font-medium transition-all group",
                                     isActive 
-                                        ? "bg-zinc-900 text-brand shadow-sm border border-zinc-800/50" 
-                                        : "text-zinc-400 hover:text-white hover:bg-zinc-900/50",
+                                        ? "bg-zinc-900 text-brand shadow-md border border-zinc-800/50" 
+                                        : "text-zinc-500 hover:text-white hover:bg-zinc-900/50",
                                     isCollapsed && "justify-center px-0"
                                 )}
                             >
@@ -113,15 +113,15 @@ export function MobileSidebar() {
                 <span className="sr-only">Toggle navigation menu</span>
             </SheetTrigger>
             <SheetContent side="left" className="flex w-64 flex-col p-0 bg-zinc-950 border-r border-zinc-800/50">
-                <div className="flex h-16 items-center border-b border-zinc-800/30 px-6">
+                <div className="flex h-20 items-center border-b border-zinc-800/30 px-8">
                     <Link href="/" className="flex items-center gap-2">
                         <span className="text-xl font-heading font-black tracking-tighter text-white uppercase">
                             Fadeaway<span className="text-brand ml-0.5">.</span>
                         </span>
                     </Link>
                 </div>
-                <div className="flex-1 overflow-auto py-6">
-                    <nav className="grid gap-1.5 px-3">
+                <div className="flex-1 overflow-auto py-8">
+                    <nav className="grid gap-2 px-4">
                         {navigation.map((item) => {
                             const isActive = pathname === item.href;
                             return (
@@ -130,10 +130,10 @@ export function MobileSidebar() {
                                     href={item.href}
                                     onClick={() => setOpen(false)}
                                     className={cn(
-                                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all group",
+                                        "flex items-center gap-4 rounded-xl px-4 py-3.5 text-sm font-medium transition-all group",
                                         isActive 
                                             ? "bg-zinc-900 text-brand border border-zinc-800/50" 
-                                            : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
+                                            : "text-zinc-500 hover:text-white hover:bg-zinc-900/50"
                                     )}
                                 >
                                     <item.icon className={cn("h-4 w-4", isActive ? "text-brand" : "group-hover:text-white")} />
