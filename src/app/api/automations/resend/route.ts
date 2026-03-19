@@ -33,9 +33,8 @@ export async function POST(req: Request) {
         const parsedBody = await parseEmailTemplate(rawBodyTemplate, companyId, profile.workspace_id);
 
         // 4. Send Email via Resend
-        // (If RESEND_API_KEY is not set or disabled, we simulate a successful send for dev MVP)
         let resendId = `sim_${Date.now()}`;
-        const DISABLE_EMAIL_SEND = true; // Added to temporarily stop automatic emails
+        const DISABLE_EMAIL_SEND = false; 
 
         if (!DISABLE_EMAIL_SEND && process.env.RESEND_API_KEY) {
             const res = await fetch('https://api.resend.com/emails', {
@@ -45,10 +44,10 @@ export async function POST(req: Request) {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    from: 'Fadeaway Leads <hello@fadeawayleads.com>', // MUST BE verified in Resend
-                    to: [contactEmail],
-                    subject: subject,
-                    text: parsedBody // Sending as plain text for max deliverability
+                    from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+                    to: ['bhav@fadeawaycreatives.com'], 
+                    subject: `[TEST] ${subject}`,
+                    text: parsedBody 
                 })
             });
 

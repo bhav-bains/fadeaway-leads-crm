@@ -131,6 +131,18 @@ export function MobileSidebar() {
                         })}
                     </nav>
                 </div>
+                <div className="mt-auto border-t p-4">
+                    <form action={logout}>
+                        <Button
+                            type="submit"
+                            variant="ghost"
+                            className="w-full justify-start text-muted-foreground hover:text-foreground"
+                        >
+                            <LogOut className="h-4 w-4 mr-2" />
+                            Log out
+                        </Button>
+                    </form>
+                </div>
             </SheetContent>
         </Sheet>
     );

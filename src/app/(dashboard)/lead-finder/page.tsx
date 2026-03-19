@@ -11,14 +11,18 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram, Activity, Code2, Terminal, Clock, Link as LinkIcon, TrendingUp, Phone, MessageSquare, Users, PenLine, Save, Wand2, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn, normalizeQueryKey } from "@/lib/utils";
-import { insertLead, runLocalSeoAudit } from "@/app/actions/leads";
+import { insertLead, runLocalSeoAudit, updateLeadManualData, updateLeadStatus } from "@/app/actions/leads";
+import { generateOutreachSuggestions } from "@/app/actions/ai";
+import { Textarea } from "@/components/ui/textarea";
 import { searchGooglePlaces, getCityAutocomplete, getAllSourcedLeads } from "@/app/actions/search";
 import { useEffect, Fragment } from "react";
 import type { EnrichmentData, ScoreBreakdown } from "@/lib/scraper";
@@ -50,6 +54,21 @@ export default function LeadFinder() {
 
     // Enrichment Drawer State
     const [drawerLead, setDrawerLead] = useState<Record<string, any> | null>(null);
+
+    // Manual Audit State
+    const [manualNotes, setManualNotes] = useState('');
+    const [igFollowers, setIgFollowers] = useState('');
+    const [igActivity, setIgActivity] = useState('');
+    const [manualEmail, setManualEmail] = useState('');
+    const [manualPhone, setManualPhone] = useState('');
+    const [isSavingManual, setIsSavingManual] = useState(false);
+
+    // Reachout AI State
+    const [reachoutLead, setReachoutLead] = useState<Record<string, any> | null>(null);
+    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [aiSuggestions, setAiSuggestions] = useState<any>(null);
+    const [isSendingEmail, setIsSendingEmail] = useState(false);
+    const [activeReachoutTab, setActiveReachoutTab] = useState('email');
 
     // Collapsible Groups State
     const [toggledGroups, setToggledGroups] = useState<Record<string, boolean>>({});
@@ -117,9 +136,13 @@ export default function LeadFinder() {
         if (result?.error) {
             toast.error(result.error);
         } else if (result?.data) {
-            const { data, nextPageToken } = result;
+            const { data, nextPageToken, auditedLeads: fetchedAuditedLeads } = result;
             const queryStr = normalizeQueryKey(niche, city);
             setActiveTokens(prev => ({ ...prev, [queryStr]: nextPageToken || null }));
+            
+            if (fetchedAuditedLeads) {
+                setAuditedLeads(prev => ({ ...prev, ...fetchedAuditedLeads }));
+            }
 
             // Append new results to master list, removing duplicates
             setResults(prev => {
@@ -148,8 +171,12 @@ export default function LeadFinder() {
         if (result?.error) {
             toast.error(result.error);
         } else if (result?.data) {
-            const { data, nextPageToken } = result;
+            const { data, nextPageToken, auditedLeads: fetchedAuditedLeads } = result;
             setActiveTokens(prev => ({ ...prev, [queryStr]: nextPageToken || null }));
+            
+            if (fetchedAuditedLeads) {
+                setAuditedLeads(prev => ({ ...prev, ...fetchedAuditedLeads }));
+            }
 
             setResults(prev => {
                 const combined = [...data, ...prev];
@@ -634,40 +661,73 @@ export default function LeadFinder() {
                                                                         {!auditData ? (
                                                                             <Button
                                                                                 size="sm"
-                                                                                variant="secondary"
-                                                                                className="h-9 px-5 font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                                                                                className="h-10 px-6 font-bold text-white bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-[1.03] rounded-xl border-0"
                                                                                 onClick={() => handleRunAudit(result)}
                                                                                 disabled={isAuditingRow}
                                                                             >
-                                                                                {isAuditingRow ? <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 mr-2 text-slate-500" />}
-                                                                                Run Audit
+                                                                                {isAuditingRow ? (
+                                                                                    <><div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" /> Auditing...</>
+                                                                                ) : (
+                                                                                    <><Search className="h-4 w-4 mr-2" /> Run Audit</>
+                                                                                )}
                                                                             </Button>
                                                                         ) : (
-                                                                            <Button
-                                                                                size="sm"
-                                                                                variant="outline"
-                                                                                className="h-9 px-5 font-medium border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                                                                onClick={() => setDrawerLead({ ...result, auditData })}
-                                                                            >
-                                                                                <Eye className="h-4 w-4 mr-1.5" /> View Data
-                                                                            </Button>
+                                                                            <>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="outline"
+                                                                                    className="h-9 px-4 font-medium border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-lg"
+                                                                                    onClick={() => setDrawerLead({ ...result, auditData })}
+                                                                                >
+                                                                                    <Eye className="h-4 w-4 mr-1.5" /> View Data
+                                                                                </Button>
+                                                                                <Button
+                                                                                     size="sm"
+                                                                                     className={cn(
+                                                                                        "h-9 px-4 font-bold text-white transition-all rounded-lg border-0",
+                                                                                        result.status === 'Contacted' 
+                                                                                            ? "bg-slate-200 text-slate-500 cursor-not-allowed shadow-none" 
+                                                                                            : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md"
+                                                                                     )}
+                                                                                     onClick={async () => {
+                                                                                         if (result.status === 'Contacted') return;
+                                                                                         setReachoutLead({ ...result, auditData });
+                                                                                         setAiSuggestions(null);
+                                                                                         setIsGeneratingAI(true);
+                                                                                        
+                                                                                        try {
+                                                                                            const res = await generateOutreachSuggestions({
+                                                                                                name: result.name,
+                                                                                                niche: result.niche || niche,
+                                                                                                city: result.city || city,
+                                                                                                website: result.website,
+                                                                                                manualNotes: result.manual_notes,
+                                                                                                igFollowers: result.ig_followers,
+                                                                                                igActivity: result.ig_activity,
+                                                                                                score: auditData?.score,
+                                                                                                seoScore: auditData?.rawScrape?.scoreBreakdown?.uxDecayTechnical,
+                                                                                                contactabilityScore: auditData?.rawScrape?.scoreBreakdown?.contactability,
+                                                                                                localIntentScore: auditData?.rawScrape?.scoreBreakdown?.cashFlowMaturity,
+                                                                                                biggestWeakness: auditData?.biggestWeakness,
+                                                                                                keywords: auditData?.rawScrape?.enrichment?.expansionKeywords, rawAudit: auditData?.rawScrape
+                                                                                            });
+                                                                                       if (res.data) setAiSuggestions(res.data);
+                                                                                         else toast.error(res.error || "AI generation failed");
+                                                                                         } catch (e) {
+                                                                                             toast.error("Failed to generate AI pitch");
+                                                                                         } finally {
+                                                                                             setIsGeneratingAI(false);
+                                                                                         }
+                                                                                     }}
+                                                                                 >
+                                                                                     {result.status === 'Contacted' ? (
+                                                                                        <><Check className="h-4 w-4 mr-1.5" /> Contacted</>
+                                                                                     ) : (
+                                                                                        <><Wand2 className="h-3.5 w-3.5 mr-1.5" /> Reachout AI</>
+                                                                                     )}
+                                                                                 </Button>
+                                                                            </>
                                                                         )}
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="default"
-                                                                            className="h-9 px-5 bg-gradient-to-r from-slate-800 to-slate-900 text-white hover:from-slate-700 hover:to-slate-800 font-medium shadow-sm"
-                                                                            onClick={() => {
-                                                                                const newSet = new Set([result.id]);
-                                                                                setSelectedIds(newSet);
-                                                                                setTimeout(() => {
-                                                                                    document.getElementById('bulk-assign-btn')?.click();
-                                                                                }, 50);
-                                                                            }}
-                                                                            disabled={leads.some(l => l.name === result.name)}
-                                                                        >
-                                                                            <Send className="h-3.5 w-3.5 mr-1.5" />
-                                                                            Pipeline
-                                                                        </Button>
                                                                     </div>
                                                                 </TableCell>
                                                             </TableRow>
@@ -713,81 +773,135 @@ export default function LeadFinder() {
             )}
             {/* Enrichment Data Drawer */}
             <Sheet open={!!drawerLead} onOpenChange={(o) => { if (!o) setDrawerLead(null); }}>
-                <SheetContent side="right" className="w-[420px] sm:w-[520px] overflow-y-auto p-0 max-h-screen">
+                <SheetContent side="right" className="!w-[90vw] sm:!w-[50vw] sm:!max-w-[50vw] overflow-y-hidden p-0 max-h-screen">
                     {drawerLead && (() => {
                         const audit = drawerLead.auditData;
                         const enrichment: EnrichmentData | undefined = audit?.rawScrape?.enrichment;
 
                         return (
-                            <div className="flex flex-col h-full bg-slate-50">
+                            <div className="flex flex-col h-full bg-slate-50 w-full overflow-hidden focus-visible:outline-none">
                                 {/* Header */}
-                                <div className="px-6 py-6 bg-white border-b sticky top-0 z-10 shadow-sm">
-                                    <SheetTitle className="text-xl font-bold leading-tight">{drawerLead.name}</SheetTitle>
-                                    <SheetDescription className="mt-1 flex items-center text-sm">
-                                        <MapPin className="h-3.5 w-3.5 mr-1" /> {drawerLead.city}
-                                        {drawerLead.website && (
-                                            <a href={drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`} target="_blank" rel="noopener noreferrer" className="ml-3 text-blue-500 hover:text-blue-700 flex items-center">
-                                                <Globe className="h-3.5 w-3.5 mr-1" /> Visit Site
-                                            </a>
-                                        )}
-                                    </SheetDescription>
-                                    <div className="flex items-center gap-2 mt-3 text-sm">
-                                        <span className="flex items-center gap-1">⭐ {drawerLead.rating}</span>
-                                        <span className="text-muted-foreground">({drawerLead.ratingCount} reviews)</span>
-                                        {audit?.rawScrape?.scoreBreakdown ? (() => {
-                                            const sb: ScoreBreakdown = audit.rawScrape.scoreBreakdown;
-                                            const variant = sb.total >= 60 ? 'default' : sb.total >= 30 ? 'secondary' : 'outline';
-                                            return <Badge variant={variant} className="ml-auto text-sm px-3 py-1">{sb.total}/100</Badge>;
-                                        })() : audit?.score !== undefined && (
-                                            <Badge variant={audit.score >= 60 ? 'default' : 'secondary'} className="ml-auto">
-                                                Score: {audit.score}/100
-                                            </Badge>
-                                        )}
+                                <div className="px-6 py-5 border-b shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-md relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                                    <div className="relative z-10 flex flex-col">
+                                        <SheetTitle className="text-2xl font-black tracking-tight text-white mb-1.5 leading-tight">{drawerLead.name}</SheetTitle>
+                                        <SheetDescription className="flex flex-wrap items-center text-blue-100 text-sm font-medium mt-0.5">
+                                            <span className="flex items-center"><MapPin className="h-3.5 w-3.5 mr-1" /> {drawerLead.city}</span>
+                                            {drawerLead.niche && <span className="ml-3 flex items-center opacity-90"><Building2 className="h-3.5 w-3.5 mr-1" />{drawerLead.niche}</span>}
+                                        </SheetDescription>
+                                        <div className="flex items-center gap-2 mt-4 text-sm bg-black/20 w-fit px-3 py-1.5 rounded-full backdrop-blur-sm shadow-inner border border-white/10">
+                                            <span className="flex items-center font-bold text-yellow-400">★ {drawerLead.rating}</span>
+                                            <span className="text-blue-100 text-xs font-semibold">({drawerLead.ratingCount} reviews)</span>
+                                            <div className="w-px h-3.5 bg-white/20 mx-1.5"></div>
+                                            {audit?.rawScrape?.scoreBreakdown ? (() => {
+                                                const sb: ScoreBreakdown = audit.rawScrape.scoreBreakdown;
+                                                return <span className="font-bold text-white flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-emerald-400"/> Score: {sb.total}/100</span>;
+                                            })() : audit?.score !== undefined && (
+                                                <span className="font-bold text-white flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-emerald-400"/> Score: {audit.score}/100</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Enrichment Cards */}
-                                <div className="p-6 space-y-4 flex-1">
+                                <div className="flex-1 overflow-y-auto w-full p-6 space-y-5">
                                     {!enrichment ? (
-                                        <div className="text-sm text-muted-foreground text-center p-8 border rounded-lg bg-white">
-                                            No enrichment data available. Run an audit first.
+                                        <div className="flex flex-col items-center justify-center p-12 bg-white rounded-2xl border shadow-sm border-dashed">
+                                            <div className="h-12 w-12 bg-blue-50 rounded-full flex items-center justify-center mb-4"><Search className="h-6 w-6 text-blue-500" /></div>
+                                            <span className="text-slate-500 font-medium text-center">No enrichment data accessible.<br/>Run an AI audit first.</span>
                                         </div>
                                     ) : (
                                         <>
-                                            {/* Score Breakdown */}
+                                            {/* Business Hub */}
+                                            <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow relative overflow-hidden group">
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 rounded-bl-full -mr-4 -mt-4 transition-transform duration-500 group-hover:scale-110"></div>
+                                                <div className="flex items-center gap-2 mb-4 relative z-10">
+                                                    <div className="h-8 w-8 rounded-full bg-indigo-50 flex items-center justify-center border border-indigo-100"><Globe className="h-4 w-4 text-indigo-500"/></div>
+                                                    <h3 className="font-bold text-slate-800 text-base">Business Intelligence</h3>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3 relative z-10">
+                                                    {drawerLead.website ? (
+                                                        <a href={drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border hover:bg-white hover:shadow-sm hover:border-blue-200 transition-all group/link">
+                                                            <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-100 group-hover/link:bg-blue-50 transition-colors"><Globe className="h-4 w-4 text-blue-500 group-hover/link:scale-110 transition-transform" /></div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Website</p>
+                                                                <p className="text-sm font-semibold text-slate-800 truncate">{drawerLead.website}</p>
+                                                            </div>
+                                                        </a>
+                                                    ) : (
+                                                        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border opacity-60"><Globe className="h-4 w-4 text-slate-400" /><span className="text-sm font-medium text-slate-500">No Website</span></div>
+                                                    )}
+                                                    
+                                                    {enrichment.contacts.emails.length > 0 ? (
+                                                        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border group/link hover:bg-white hover:shadow-sm hover:border-amber-200 transition-all">
+                                                            <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-100 group-hover/link:bg-amber-50 transition-colors"><Mail className="h-4 w-4 text-amber-500 group-hover/link:scale-110 transition-transform" /></div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Email Match</p>
+                                                                <p className="text-sm font-semibold text-slate-800 truncate" title={enrichment.contacts.emails[0].email}>{enrichment.contacts.emails[0].email}</p>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border opacity-60"><Mail className="h-4 w-4 text-slate-400" /><span className="text-sm font-medium text-slate-500">No Email</span></div>
+                                                    )}
+
+                                                    <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border group/link hover:bg-white hover:shadow-sm hover:border-emerald-200 transition-all">
+                                                        <div className="bg-white p-2 text-emerald-500 rounded-lg shadow-sm border border-slate-100 group-hover/link:bg-emerald-50 transition-colors flex justify-center items-center"><Phone className="h-4 w-4 group-hover/link:scale-110 transition-transform"/></div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Phone Link</p>
+                                                            <p className="text-sm font-semibold text-slate-800 truncate">{enrichment.contacts.hasPhone ? 'Detected via href:tel' : 'Not linked on site'}</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border">
+                                                        <div className="min-w-0">
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1.5 ml-1">Social Footprint</p>
+                                                            <div className="flex items-center gap-2">
+                                                                {enrichment?.socials?.instagram ? <a href={enrichment.socials.instagram.url} target="_blank" rel="noreferrer" className="bg-white p-1.5 rounded-lg shadow-sm border hover:scale-110 transition-transform hover:border-pink-300 group/soc"><Instagram className="h-4 w-4 text-pink-500 group-hover/soc:fill-pink-50"/></a> : null}
+                                                                {enrichment?.socials?.facebook ? <a href={enrichment.socials.facebook.url} target="_blank" rel="noreferrer" className="bg-white px-2 py-1 rounded-lg text-blue-600 font-bold shadow-sm border hover:scale-110 transition-transform hover:border-blue-400 hover:bg-blue-50 text-[12px] leading-none">f</a> : null}
+                                                                {enrichment?.socials?.tiktok ? <a href={enrichment.socials.tiktok.url} target="_blank" rel="noreferrer" className="bg-white px-2 py-1 rounded-lg text-slate-900 font-black shadow-sm border hover:scale-110 transition-transform hover:border-slate-800 hover:bg-slate-50 text-[12px] leading-none">d</a> : null}
+                                                                {(!enrichment?.socials?.instagram && !enrichment?.socials?.facebook && !enrichment?.socials?.tiktok) && <span className="text-xs font-medium text-slate-400 ml-1">None found</span>}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* AI Score Full Width */}
                                             {audit?.rawScrape?.scoreBreakdown && (() => {
                                                 const sb: ScoreBreakdown = audit.rawScrape.scoreBreakdown;
                                                 const categories = [
-                                                    { label: 'UX Decay & Technical', score: sb.uxDecayTechnical, max: 45, color: 'bg-red-500' },
-                                                    { label: 'Cash Flow & Maturity', score: sb.cashFlowMaturity, max: 30, color: 'bg-blue-500' },
-                                                    { label: 'Contactability', score: sb.contactability, max: 25, color: 'bg-green-500' },
+                                                    { label: 'UX Decay & Tech', score: sb.uxDecayTechnical, max: 45, from: 'from-rose-400', to: 'to-rose-500', icon: '🚨', bg: 'bg-rose-50/50', border: 'border-rose-100/50' },
+                                                    { label: 'Maturity & Cash', score: sb.cashFlowMaturity, max: 30, from: 'from-blue-400', to: 'to-indigo-500', icon: '💼', bg: 'bg-indigo-50/50', border: 'border-indigo-100/50' },
+                                                    { label: 'Contact Access', score: sb.contactability, max: 25, from: 'from-emerald-400', to: 'to-teal-500', icon: '📞', bg: 'bg-emerald-50/50', border: 'border-emerald-100/50' },
                                                 ];
                                                 return (
-                                                    <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-                                                        <div className="bg-muted/50 px-4 py-2 border-b">
-                                                            <h3 className="font-semibold text-sm">Score Breakdown ({sb.total}/100)</h3>
-                                                        </div>
-                                                        <div className="p-4 space-y-3">
-                                                            {categories.map((cat, i) => (
-                                                                <div key={i} className="space-y-1">
-                                                                    <div className="flex justify-between text-xs">
-                                                                        <span className="font-medium">{cat.label}</span>
-                                                                        <span className="text-muted-foreground">{cat.score}/{cat.max}</span>
+                                                    <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden relative group">
+                                                        <div className="p-5 flex flex-col gap-4 relative z-10">
+                                                            <h3 className="font-bold text-slate-800 flex items-center gap-2"><Activity className="h-4 w-4 text-indigo-500" /> AI Score Breakdown <span className="ml-auto bg-slate-100 text-slate-800 text-xs px-2 py-0.5 rounded font-bold border border-slate-200">{sb.total}/100</span></h3>
+                                                            
+                                                            <div className="grid grid-cols-3 gap-3">
+                                                                {categories.map((cat, i) => (
+                                                                    <div key={i} className={`flex flex-col gap-2.5 p-3.5 ${cat.bg} rounded-xl border ${cat.border} shadow-[inset_0_1px_2px_rgba(255,255,255,0.5)]`}>
+                                                                        <div className="flex justify-between items-center text-sm">
+                                                                            <span className="font-semibold text-slate-800 flex items-center gap-1.5 tracking-tight"><span className="text-sm leading-none">{cat.icon}</span> {cat.label}</span>
+                                                                            <span className="font-bold text-slate-900 text-xs">{cat.score || 0}<span className="text-slate-400 font-medium">/{cat.max}</span></span>
+                                                                        </div>
+                                                                        <div className="h-2 bg-slate-200/50 rounded-full w-full overflow-hidden">
+                                                                            <div
+                                                                                className={`h-full bg-gradient-to-r ${cat.from} ${cat.to} rounded-full transition-all duration-1000`}
+                                                                                style={{ width: `${Math.min((cat.score || 0) / cat.max, 1) * 100}%` }}
+                                                                            />
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                                        <div
-                                                                            className={`h-full ${cat.color} rounded-full transition-all`}
-                                                                            style={{ width: `${(cat.score / cat.max) * 100}%` }}
-                                                                        />
-                                                                    </div>
-                                                                </div>
-                                                            ))}
+                                                                ))}
+                                                            </div>
+
                                                             {sb.rulesTriggered && sb.rulesTriggered.length > 0 && (
-                                                                <div className="pt-2 border-t mt-3">
-                                                                    <span className="text-xs font-semibold text-muted-foreground uppercase">Rules Triggered</span>
-                                                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                                <div className="mt-2 pt-4 border-t border-slate-100">
+                                                                    <div className="flex flex-wrap gap-1.5">
                                                                         {sb.rulesTriggered.map((rule: string, i: number) => (
-                                                                            <Badge key={i} variant="outline" className="text-[10px]">{rule}</Badge>
+                                                                            <span key={i} className="text-[10px] font-semibold px-2 py-1 bg-rose-50 text-rose-600 rounded-md border border-rose-100/50 flex items-center gap-1">
+                                                                                <AlertCircle className="h-3 w-3" /> {rule}
+                                                                            </span>
                                                                         ))}
                                                                     </div>
                                                                 </div>
@@ -796,180 +910,243 @@ export default function LeadFinder() {
                                                     </div>
                                                 );
                                             })()}
-                                            {/* 1. Contacts */}
-                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-                                                <div className="bg-muted/50 px-4 py-2 border-b flex items-center gap-2">
-                                                    <Mail className="h-4 w-4 text-muted-foreground" />
-                                                    <h3 className="font-semibold text-sm">Contact Information</h3>
-                                                </div>
-                                                <div className="p-4 space-y-3 text-sm">
-                                                    {enrichment.contacts.emails.length > 0 ? (
-                                                        <div className="space-y-1.5">
-                                                            {enrichment.contacts.emails.map((e, i) => (
-                                                                <div key={i} className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
-                                                                    <span className="font-medium">{e.email}</span>
-                                                                    <div className="flex gap-1.5">
-                                                                        <Badge variant="outline" className="text-[10px] bg-white">{e.type}</Badge>
-                                                                        <Badge variant="outline" className="text-[10px] bg-white">{e.source}</Badge>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-muted-foreground italic">No emails found</span>
-                                                    )}
-                                                    <div className="flex items-center gap-2 pt-1">
-                                                        {enrichment.contacts.hasContactForm ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
-                                                        <span>Contact Form</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        {enrichment.contacts.hasPhone ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
-                                                        <span>Phone Number (tel: link)</span>
-                                                    </div>
-                                                </div>
-                                            </div>
 
-                                            {/* 2. Technical SEO */}
-                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-                                                <div className="bg-muted/50 px-4 py-2 border-b">
-                                                    <h3 className="font-semibold text-sm">Technical SEO</h3>
-                                                </div>
-                                                <div className="p-4 space-y-2 text-sm">
-                                                    {[
-                                                        { label: 'Title Tag', ok: !enrichment.seo.titleTag.isEmpty, detail: enrichment.seo.titleTag.text || '(empty)' },
-                                                        { label: `H1 Tags (${enrichment.seo.h1Tags.count})`, ok: enrichment.seo.h1Tags.count > 0, detail: enrichment.seo.h1Tags.texts[0] || '(none)' },
-                                                        { label: 'Meta Description', ok: enrichment.seo.metaDescription.exists, detail: enrichment.seo.metaDescription.content || '(missing)' },
-                                                        { label: 'Mobile Viewport', ok: enrichment.seo.hasViewport, detail: enrichment.seo.hasViewport ? 'Present' : 'Missing' },
-                                                        { label: 'Schema Markup', ok: enrichment.seo.hasSchemaMarkup, detail: enrichment.seo.hasSchemaMarkup ? 'Present' : 'Missing' },
-                                                        { label: 'NoIndex (Fatal Flaw)', ok: !enrichment.seo.hasNoIndex, detail: enrichment.seo.hasNoIndex ? '⚠️ BLOCKED' : 'Not blocked' },
-                                                    ].map((item, idx) => (
-                                                        <div key={idx} className="flex items-start justify-between bg-slate-50 px-3 py-2 rounded border">
-                                                            <div className="flex-1 min-w-0">
-                                                                <span className="font-medium">{item.label}</span>
-                                                                <p className="text-xs text-muted-foreground truncate mt-0.5" title={item.detail}>{item.detail}</p>
+                                            {/* AI Audit Detailed Results in 2-Column Grid */}
+                                            <div className="grid grid-cols-2 gap-4 pb-8">
+                                                <div className="bg-white flex flex-col rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-all relative overflow-hidden group">
+                                                    <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50/50 rounded-bl-[100px] -mr-4 -mt-4 transition-transform duration-500 group-hover:scale-[1.3]"></div>
+                                                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 relative z-10"><Code2 className="h-4 w-4 text-blue-500" /> Technical SEO</h3>
+                                                    <div className="space-y-1.5 relative z-10 flex-1">
+                                                        {[
+                                                            { label: 'Title Tag', ok: !enrichment.seo.titleTag.isEmpty },
+                                                            { label: 'H1 Header', ok: enrichment.seo.h1Tags.count > 0 },
+                                                            { label: 'Meta Desc', ok: enrichment.seo.metaDescription.exists },
+                                                            { label: 'Mobile Viewport', ok: enrichment.seo.hasViewport },
+                                                            { label: 'NoIndex (Flaw)', ok: !enrichment.seo.hasNoIndex },
+                                                        ].map((item, idx) => (
+                                                            <div key={idx} className="flex items-center justify-between bg-slate-50/50 px-3 py-2 rounded-lg text-sm border border-slate-100/50">
+                                                                <span className="font-medium text-slate-600 text-[12px]">{item.label}</span>
+                                                                {item.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <XCircle className="h-3.5 w-3.5 text-rose-500" />}
                                                             </div>
-                                                            {item.ok ? <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" /> : <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* 3. Tracking Pixels */}
-                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-                                                <div className="bg-muted/50 px-4 py-2 border-b">
-                                                    <h3 className="font-semibold text-sm">Tracking Pixels</h3>
-                                                </div>
-                                                <div className="p-4 space-y-2 text-sm">
-                                                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
-                                                        <span className="font-medium">Meta Pixel (Facebook)</span>
-                                                        {enrichment?.pixels?.hasMetaPixel ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
-                                                    </div>
-                                                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
-                                                        <span className="font-medium">Google Ads / Analytics</span>
-                                                        {enrichment?.pixels?.hasGoogleAds ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
+                                                        ))}
                                                     </div>
                                                 </div>
-                                            </div>
 
-                                            {/* 4. Business Expansion */}
-                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-                                                <div className="bg-muted/50 px-4 py-2 border-b">
-                                                    <h3 className="font-semibold text-sm">Business Expansion Keywords</h3>
-                                                </div>
-                                                <div className="p-4 text-sm">
-                                                    {enrichment?.expansionKeywords?.length > 0 ? (
-                                                        <div className="flex flex-wrap gap-1.5">
-                                                            {(enrichment?.expansionKeywords || []).map((kw: string, i: number) => (
-                                                                <Badge key={i} variant="secondary" className="text-xs">{kw}</Badge>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-muted-foreground italic">No expansion keywords detected</span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* 5. CTAs & Booking */}
-                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-                                                <div className="bg-muted/50 px-4 py-2 border-b">
-                                                    <h3 className="font-semibold text-sm">CTAs & Booking Links</h3>
-                                                </div>
-                                                <div className="p-4 space-y-3 text-sm">
-                                                    <div className="flex items-center gap-2">
-                                                        {enrichment?.ctas?.hasGeneralCTA ? <CheckCircle2 className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
-                                                        <span>General CTA Detected</span>
-                                                    </div>
-                                                    {enrichment?.ctas?.bookingUrls?.length > 0 ? (
-                                                        <div className="space-y-1.5">
-                                                            <span className="text-xs font-semibold text-muted-foreground uppercase">Booking Software</span>
-                                                            {(enrichment?.ctas?.bookingUrls || []).map((b: any, i: number) => (
-                                                                <div key={i} className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
-                                                                    <Badge variant="default" className="text-xs">{b.platform}</Badge>
-                                                                    <a href={b.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline truncate ml-2 max-w-[200px]">{b.url}</a>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-muted-foreground italic">No external booking software detected</span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* 6. Social Media */}
-                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-                                                <div className="bg-muted/50 px-4 py-2 border-b">
-                                                    <h3 className="font-semibold text-sm">Social Media</h3>
-                                                </div>
-                                                <div className="p-4 space-y-2 text-sm">
-                                                    {enrichment?.socials?.instagram ? (
-                                                        <a href={enrichment.socials.instagram.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border hover:bg-slate-100 transition-colors">
-                                                            <div className="flex items-center gap-2 min-w-0">
-                                                                <Badge variant="outline" className="text-xs shrink-0">Instagram</Badge>
-                                                                <span className="font-medium text-blue-600 truncate">@{enrichment.socials.instagram.handle}</span>
+                                                <div className="flex flex-col gap-4">
+                                                    <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-all relative overflow-hidden group">
+                                                        <div className="absolute top-0 right-0 w-20 h-20 bg-purple-50/50 rounded-bl-[100px] -mr-4 -mt-4 transition-transform duration-500 group-hover:scale-[1.3]"></div>
+                                                        <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2 relative z-10"><Terminal className="h-4 w-4 text-purple-500" /> Tracking Pixels</h3>
+                                                        <div className="space-y-1.5 relative z-10">
+                                                            <div className="flex items-center justify-between bg-slate-50/50 px-3 py-2 rounded-lg text-sm border border-slate-100/50">
+                                                                <span className="font-medium text-slate-600 text-[12px] flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Meta Pixel</span>
+                                                                {enrichment?.pixels?.hasMetaPixel ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <XCircle className="h-3.5 w-3.5 text-slate-300" />}
                                                             </div>
-                                                            <ExternalLink className="h-3.5 w-3.5 text-blue-500 shrink-0 ml-2" />
-                                                        </a>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2 text-muted-foreground"><XCircle className="h-4 w-4 text-red-400" /> No Instagram found</div>
-                                                    )}
-                                                    {enrichment?.socials?.facebook ? (
-                                                        <a href={enrichment.socials.facebook.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border hover:bg-slate-100 transition-colors">
-                                                            <Badge variant="outline" className="text-xs">Facebook</Badge>
-                                                            <ExternalLink className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                                                        </a>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2 text-muted-foreground"><XCircle className="h-4 w-4 text-red-400" /> No Facebook found</div>
-                                                    )}
-                                                    {enrichment?.socials?.tiktok ? (
-                                                        <a href={enrichment.socials.tiktok.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border hover:bg-slate-100 transition-colors">
-                                                            <Badge variant="outline" className="text-xs">TikTok</Badge>
-                                                            <ExternalLink className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                                                        </a>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2 text-muted-foreground"><XCircle className="h-4 w-4 text-red-400" /> No TikTok found</div>
-                                                    )}
+                                                            <div className="flex items-center justify-between bg-slate-50/50 px-3 py-2 rounded-lg text-sm border border-slate-100/50">
+                                                                <span className="font-medium text-slate-600 text-[12px] flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Google Ads</span>
+                                                                {enrichment?.pixels?.hasGoogleAds ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <XCircle className="h-3.5 w-3.5 text-slate-300" />}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-all relative overflow-hidden group flex-1">
+                                                        <div className="absolute top-0 right-0 w-20 h-20 bg-amber-50/50 rounded-bl-[100px] -mr-4 -mt-4 transition-transform duration-500 group-hover:scale-[1.3]"></div>
+                                                        <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2 relative z-10"><LinkIcon className="h-4 w-4 text-amber-500" /> Conversion Funnel</h3>
+                                                        <div className="space-y-2 relative z-10">
+                                                            <div className="flex items-center justify-between bg-slate-50/50 px-3 py-2 rounded-lg text-sm border border-slate-100/50">
+                                                                <span className="font-medium text-slate-600 text-[12px]">General CTA Found</span>
+                                                                {enrichment?.ctas?.hasGeneralCTA ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <XCircle className="h-3.5 w-3.5 text-rose-500" />}
+                                                            </div>
+                                                            {enrichment?.ctas?.bookingUrls?.length > 0 && (
+                                                                <div className="mt-2 space-y-1">
+                                                                    {(enrichment?.ctas?.bookingUrls || []).map((b: any, i: number) => (
+                                                                        <a key={i} href={b.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-slate-50/50 p-1.5 rounded-lg border border-slate-100/50 hover:border-blue-200 hover:bg-white transition-colors">
+                                                                            <Badge variant="secondary" className="text-[9px] bg-slate-200 text-slate-700 pointer-events-none px-1.5 py-0 h-4 border-none">{b.platform}</Badge>
+                                                                            <span className="text-[11px] text-blue-600 truncate max-w-[110px] font-medium">{b.url}</span>
+                                                                        </a>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-white flex flex-col rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-all relative overflow-hidden group">
+                                                    <div className="absolute top-0 left-0 w-24 h-24 bg-rose-50/50 rounded-br-[100px] -ml-4 -mt-4 transition-transform duration-500 group-hover:scale-[1.3]"></div>
+                                                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 relative z-10"><Clock className="h-4 w-4 text-rose-500" /> UX Decay Factors</h3>
+                                                    <div className="space-y-2 relative z-10 flex-1">
+                                                        <div className="flex items-center justify-between bg-slate-50/50 px-3 py-3 rounded-lg text-sm border border-slate-100/50">
+                                                            <span className="font-medium text-slate-600 text-[12px]">Copyright ({enrichment?.uxDecay?.copyrightYear || 'N/A'})</span>
+                                                            {enrichment?.uxDecay?.isOutdatedCopyright ? <Badge variant="destructive" className="bg-rose-100 text-rose-700 shadow-none border border-rose-200 text-[10px] px-1.5 py-0 h-4 uppercase tracking-wider">Outdated</Badge> : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                                                        </div>
+                                                        <div className="flex items-center justify-between bg-slate-50/50 px-3 py-3 rounded-lg text-sm border border-slate-100/50">
+                                                            <span className="font-medium text-slate-600 text-[12px]">Cheap Web Builder</span>
+                                                            {enrichment?.uxDecay?.usesCheapBuilder ? <Badge variant="destructive" className="bg-rose-100 text-rose-700 shadow-none border border-rose-200 text-[10px] px-1.5 py-0 h-4 uppercase tracking-wider">Detected</Badge> : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-white flex flex-col rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-all relative overflow-hidden group">
+                                                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50/50 rounded-bl-[100px] -mr-4 -mt-4 transition-transform duration-500 group-hover:scale-[1.3]"></div>
+                                                    <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2 relative z-10"><TrendingUp className="h-4 w-4 text-emerald-500" /> Keywords</h3>
+                                                    <div className="flex flex-wrap gap-1.5 relative z-10 content-start flex-1">
+                                                        {enrichment?.expansionKeywords?.length > 0 ? (
+                                                            (enrichment?.expansionKeywords || []).map((kw: string, i: number) => (
+                                                                <span key={i} className="px-2.5 py-1 bg-emerald-50/80 text-emerald-700 text-[10px] font-bold uppercase tracking-wider rounded-md border border-emerald-100/60">{kw}</span>
+                                                            ))
+                                                        ) : (
+                                                            <span className="text-xs text-slate-400 italic">None detected</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            {/* 7. UX Decay Signals */}
-                                            <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-                                                <div className="bg-muted/50 px-4 py-2 border-b">
-                                                    <h3 className="font-semibold text-sm">UX Decay Signals</h3>
+                                            {/* Manual Audit Section */}
+                                            <div className="bg-white rounded-2xl border-2 border-dashed border-indigo-200 shadow-sm p-5 relative overflow-hidden group hover:border-indigo-300 transition-colors">
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/30 rounded-bl-full -mr-6 -mt-6"></div>
+                                                <div className="flex items-center gap-2 mb-5 relative z-10">
+                                                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center border border-indigo-200"><PenLine className="h-4 w-4 text-indigo-600"/></div>
+                                                    <h3 className="font-bold text-slate-800 text-base">Manual Audit</h3>
+                                                    <Badge variant="outline" className="ml-auto text-[10px] uppercase tracking-wider font-bold text-indigo-500 border-indigo-200 bg-indigo-50">Your Notes</Badge>
                                                 </div>
-                                                <div className="p-4 space-y-2 text-sm">
-                                                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
+
+                                                <div className="space-y-4 relative z-10">
+                                                    {/* Notes */}
+                                                    <div>
+                                                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><MessageSquare className="h-3 w-3" /> Audit Comments</label>
+                                                        <Textarea
+                                                            placeholder="Add your manual audit notes here... (pain points, observations, pitch angles)"
+                                                            className="min-h-[80px] text-sm bg-slate-50/50 border-slate-200 focus:border-indigo-300 focus:ring-indigo-200 rounded-xl resize-none"
+                                                            value={manualNotes}
+                                                            onChange={(e) => setManualNotes(e.target.value)}
+                                                        />
+                                                    </div>
+
+                                                    {/* IG Metrics */}
+                                                    <div className="grid grid-cols-2 gap-3">
                                                         <div>
-                                                            <span className="font-medium">Copyright Year</span>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                {enrichment?.uxDecay?.copyrightYear ? `© ${enrichment.uxDecay.copyrightYear}` : 'Not found'}
-                                                            </p>
+                                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Instagram className="h-3 w-3 text-pink-500" /> IG Followers</label>
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="e.g. 5200"
+                                                                className="h-9 text-sm bg-slate-50/50 rounded-lg"
+                                                                value={igFollowers}
+                                                                onChange={(e) => setIgFollowers(e.target.value)}
+                                                            />
                                                         </div>
-                                                        {enrichment?.uxDecay?.isOutdatedCopyright ? <XCircle className="h-4 w-4 text-red-500" /> : <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                                        <div>
+                                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Users className="h-3 w-3 text-purple-500" /> Activity Level</label>
+                                                            <Select value={igActivity} onValueChange={(val) => setIgActivity(val || '')}>
+                                                                <SelectTrigger className="h-9 text-sm bg-slate-50/50 rounded-lg">
+                                                                    <SelectValue placeholder="Select..." />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="very_active">🟢 Very Active</SelectItem>
+                                                                    <SelectItem value="mid_active">🟡 Mid Active</SelectItem>
+                                                                    <SelectItem value="low_active">🟠 Low Active</SelectItem>
+                                                                    <SelectItem value="not_active">🔴 Not Active</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded border">
-                                                        <span className="font-medium">Cheap Web Builder</span>
-                                                        {enrichment?.uxDecay?.usesCheapBuilder ? <XCircle className="h-4 w-4 text-red-500" /> : <CheckCircle2 className="h-4 w-4 text-green-500" />}
+
+                                                    {/* Manual Contact */}
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Mail className="h-3 w-3 text-amber-500" /> Add Email</label>
+                                                            <Input
+                                                                type="email"
+                                                                placeholder="name@company.com"
+                                                                className="h-9 text-sm bg-slate-50/50 rounded-lg"
+                                                                value={manualEmail}
+                                                                onChange={(e) => setManualEmail(e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Phone className="h-3 w-3 text-emerald-500" /> Add Phone</label>
+                                                            <Input
+                                                                type="tel"
+                                                                placeholder="+1 (555) 000-0000"
+                                                                className="h-9 text-sm bg-slate-50/50 rounded-lg"
+                                                                value={manualPhone}
+                                                                onChange={(e) => setManualPhone(e.target.value)}
+                                                            />
+                                                        </div>
                                                     </div>
+
+                                                    {/* Save Button */}
+                                                    <Button
+                                                        className="w-full h-10 font-bold text-white bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 shadow-md rounded-xl border-0 transition-all"
+                                                        disabled={isSavingManual}
+                                                        onClick={async () => {
+                                                            if (!drawerLead?.auditData?.companyId && !drawerLead?.companyId) {
+                                                                toast.error('No company ID found. Run an audit first to save this lead.');
+                                                                return;
+                                                            }
+                                                            setIsSavingManual(true);
+                                                            try {
+                                                                const companyId = drawerLead.auditData?.companyId || drawerLead.companyId;
+                                                                const result = await updateLeadManualData(companyId, {
+                                                                    manual_notes: manualNotes || undefined,
+                                                                    ig_followers: igFollowers ? parseInt(igFollowers) : null,
+                                                                    ig_activity: igActivity || null,
+                                                                    manual_email: manualEmail || undefined,
+                                                                    manual_phone: manualPhone || undefined,
+                                                                });
+                                                                if (result.error) {
+                                                                    toast.error(result.error);
+                                                                } else {
+                                                                    toast.success('Manual audit data saved!');
+                                                                    
+                                                                    const updatedEmail = manualEmail || drawerLead.auditData?.email || drawerLead.email;
+                                                                    const updatedPhone = manualPhone || drawerLead.phone;
+                                                                    
+                                                                    // Update Drawer Lead
+                                                                    setDrawerLead({
+                                                                        ...drawerLead,
+                                                                        manual_notes: manualNotes,
+                                                                        ig_followers: igFollowers ? parseInt(igFollowers) : null,
+                                                                        ig_activity: igActivity,
+                                                                        email: updatedEmail,
+                                                                        phone: updatedPhone,
+                                                                        auditData: {
+                                                                            ...(drawerLead?.auditData || {}),
+                                                                            email: updatedEmail
+                                                                        }
+                                                                    });
+
+                                                                    // Update Global Lists
+                                                                    setResults(prev => prev.map(r => r.id === drawerLead.id ? {
+                                                                        ...r,
+                                                                        manual_notes: manualNotes,
+                                                                        ig_followers: igFollowers ? parseInt(igFollowers) : null,
+                                                                        ig_activity: igActivity,
+                                                                        email: updatedEmail,
+                                                                        phone: updatedPhone,
+                                                                    } : r));
+
+                                                                    if (drawerLead.auditData || auditedLeads[drawerLead.id]) {
+                                                                        setAuditedLeads(prev => ({
+                                                                            ...prev,
+                                                                            [drawerLead.id]: {
+                                                                                ...(prev[drawerLead.id] || drawerLead.auditData || {}),
+                                                                                email: updatedEmail
+                                                                            }
+                                                                        }));
+                                                                    }
+                                                                }
+                                                            } catch (err) {
+                                                                toast.error('Failed to save manual data');
+                                                            } finally {
+                                                                setIsSavingManual(false);
+                                                            }
+                                                        }}
+                                                    >
+                                                        {isSavingManual ? (
+                                                            <><div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" /> Saving...</>
+                                                        ) : (
+                                                            <><Save className="h-4 w-4 mr-2" /> Save Manual Audit Data</>
+                                                        )}
+                                                    </Button>
                                                 </div>
                                             </div>
                                         </>
@@ -980,6 +1157,175 @@ export default function LeadFinder() {
                     })()}
                 </SheetContent>
             </Sheet>
+
+            {/* AI Reachout Modal */}
+            <Dialog open={!!reachoutLead} onOpenChange={(o) => { if (!o) setReachoutLead(null); }}>
+                <DialogContent className="sm:max-w-[700px] bg-slate-50 border-slate-200 shadow-2xl p-0 overflow-hidden rounded-2xl">
+                    <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 p-6 text-white relative">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-full -mr-4 -mt-4"></div>
+                        <DialogTitle className="text-2xl font-black flex items-center gap-2 relative z-10">
+                            <Sparkles className="h-6 w-6 text-yellow-300" /> AI Outreach Pitch
+                        </DialogTitle>
+                        <DialogDescription className="text-white/80 mt-1 relative z-10 text-sm font-medium">
+                            Tailored email sequence for {reachoutLead?.name} based on audit data.
+                        </DialogDescription>
+                    </div>
+
+                    <div className="p-6 overflow-y-auto max-h-[70vh]">
+                        {isGeneratingAI ? (
+                            <div className="py-20 flex flex-col items-center justify-center text-center">
+                                <Loader2 className="h-10 w-10 text-indigo-500 animate-spin mb-4" />
+                                <h3 className="text-lg font-bold text-slate-800">Generating hyper-personalized pitch...</h3>
+                                <p className="text-sm text-slate-500">Analyzing audit data, manual notes, and finding pain points.</p>
+                            </div>
+                        ) : aiSuggestions ? (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                        <h4 className="font-bold text-indigo-700 text-sm mb-2 flex items-center gap-1.5"><Search className="h-4 w-4"/> Key Findings</h4>
+                                        <ul className="text-xs text-slate-600 space-y-2 list-disc pl-4">
+                                            {aiSuggestions.keyFindings?.map((f: string, i: number) => <li key={i}>{f}</li>)}
+                                        </ul>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                        <h4 className="font-bold text-rose-600 text-sm mb-2 flex items-center gap-1.5"><AlertCircle className="h-4 w-4"/> Pain Points</h4>
+                                        <ul className="text-xs text-slate-600 space-y-2 list-disc pl-4">
+                                            {aiSuggestions.painPoints?.map((p: string, i: number) => <li key={i}>{p}</li>)}
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <Tabs defaultValue="email" className="w-full" onValueChange={setActiveReachoutTab}>
+                                    <TabsList className="grid grid-cols-2 mb-6 bg-slate-200/50 p-1 rounded-xl">
+                                        <TabsTrigger value="email" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-indigo-600 shadow-none">
+                                            <Mail className="h-4 w-4 mr-2" /> Email Pitch
+                                        </TabsTrigger>
+                                        <TabsTrigger value="dm" className="rounded-lg font-bold data-[state=active]:bg-white data-[state=active]:text-pink-600 shadow-none">
+                                            <Instagram className="h-4 w-4 mr-2" /> Instagram DM
+                                        </TabsTrigger>
+                                    </TabsList>
+
+                                    <TabsContent value="email" className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-700 mb-1.5 block">Subject Line</label>
+                                            <Input 
+                                                value={aiSuggestions.subjectLine} 
+                                                onChange={(e) => setAiSuggestions({...aiSuggestions, subjectLine: e.target.value})}
+                                                className="font-medium bg-white border-slate-300"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-700 mb-1.5 block flex justify-between">
+                                                Email Body
+                                                <span className="text-indigo-500 text-[10px] font-normal uppercase tracking-wider">Supports Markdown</span>
+                                            </label>
+                                            <Textarea 
+                                                value={aiSuggestions.emailBody} 
+                                                onChange={(e) => setAiSuggestions({...aiSuggestions, emailBody: e.target.value})}
+                                                className="min-h-[200px] text-sm leading-relaxed bg-white border-slate-300 resize-y"
+                                            />
+                                        </div>
+                                    </TabsContent>
+
+                                    <TabsContent value="dm" className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-700 mb-1.5 block flex justify-between">
+                                                Instagram Direct Message
+                                                <span className="text-pink-500 text-[10px] font-normal uppercase tracking-wider">Punchy & Short</span>
+                                            </label>
+                                            <Textarea 
+                                                value={aiSuggestions.dmBody} 
+                                                onChange={(e) => setAiSuggestions({...aiSuggestions, dmBody: e.target.value})}
+                                                className="min-h-[150px] text-sm leading-relaxed bg-white border-slate-300 resize-y"
+                                            />
+                                        </div>
+                                        <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 flex items-start gap-2">
+                                            <Activity className="h-4 w-4 text-amber-500 mt-0.5" />
+                                            <p className="text-[11px] text-amber-700 leading-normal">
+                                                <strong>Tip:</strong> DMs work best when sent directly from your mobile app. Copy this suggestion and paste it into Instagram!
+                                            </p>
+                                        </div>
+                                    </TabsContent>
+                                </Tabs>
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div className="p-4 bg-slate-100 border-t border-slate-200 flex justify-between items-center">
+                        <span className="text-xs text-slate-500 font-medium px-2">
+                            To: <span className="font-bold text-slate-800">{reachoutLead?.auditData?.email || reachoutLead?.email || 'No email found'}</span>
+                        </span>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => setReachoutLead(null)} className="h-10 px-5">Cancel</Button>
+                            {activeReachoutTab === 'email' ? (
+                                <Button 
+                                    className="h-10 px-6 font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md border-0"
+                                    disabled={isGeneratingAI || !aiSuggestions || isSendingEmail || (!reachoutLead?.auditData?.email && !reachoutLead?.email)}
+                                    onClick={async () => {
+                                        const emailToSend = reachoutLead?.auditData?.email || reachoutLead?.email;
+                                        const companyId = reachoutLead?.auditData?.companyId || reachoutLead?.companyId;
+
+                                        if (!emailToSend || !companyId) {
+                                            toast.error("Missing email or company ID");
+                                            return;
+                                        }
+
+                                        setIsSendingEmail(true);
+                                        try {
+                                            const res = await fetch('/api/automations/resend', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    companyId: companyId,
+                                                    contactEmail: emailToSend,
+                                                    sequenceName: "AI Manual Pitch",
+                                                    subject: aiSuggestions.subjectLine,
+                                                    rawBodyTemplate: aiSuggestions.emailBody
+                                                })
+                                            });
+
+                                            const data = await res.json();
+                                            if (data.error) throw new Error(data.error);
+
+                                            toast.success("Email dispatched via Resend!");
+                                            setReachoutLead(null);
+                                            
+                                            // Persist status to DB
+                                            await updateLeadStatus(companyId, 'Contacted');
+
+                                            // Update local status so UI reflects 'Contacted'
+                                            const newResults = results.map(r => r.id === (reachoutLead?.id || '') ? { ...r, status: 'Contacted' } : r);
+                                            setResults(newResults);
+                                        } catch (e: any) {
+                                            toast.error(e.message || "Failed to send email");
+                                        } finally {
+                                            setIsSendingEmail(false);
+                                        }
+                                    }}
+                                >
+                                    {isSendingEmail ? (
+                                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Dispatching...</>
+                                    ) : (
+                                        <><Send className="h-4 w-4 mr-2" /> Send Dispatch</>
+                                    )}
+                                </Button>
+                            ) : (
+                                <Button 
+                                    className="h-10 px-6 font-bold text-white bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 shadow-md border-0"
+                                    disabled={isGeneratingAI || !aiSuggestions}
+                                    onClick={async () => {
+                                        navigator.clipboard.writeText(aiSuggestions.dmBody);
+                                        toast.success("DM copied to clipboard!");
+                                        setReachoutLead(null);
+                                    }}
+                                >
+                                    <Download className="h-4 w-4 mr-2" /> Copy DM
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -108,6 +108,8 @@ export async function insertLead(
                 phone: leadData.phone || existingCompany.phone,
                 website: leadData.website || existingCompany.website,
                 source_id: leadData.googlePlaceId || existingCompany.source_id,
+                niche: leadData.niche || existingCompany.niche,
+                status: (existingCompany.status === 'New' && scrapeResult) ? 'Audited' : existingCompany.status,
             })
             .eq('id', existingCompany.id)
             .select()
@@ -127,7 +129,8 @@ export async function insertLead(
                 phone: leadData.phone,
                 website: leadData.website,
                 source_id: leadData.googlePlaceId,
-                status: 'New'
+                niche: leadData.niche,
+                status: scrapeResult ? 'Audited' : 'New'
             }])
             .select()
             .single();
@@ -234,6 +237,8 @@ export async function runLocalSeoAudit(
     try {
         const scrape = await scrapeWebsite(urlToScrape, city, niche, ratingCount);
 
+        let finalCompanyId: string | undefined;
+
         // Auto-save audit to Supabase if we have lead metadata
         if (leadMeta) {
             console.log(`[AutoSave] Starting database persistence for ${leadMeta.name}...`);
@@ -255,11 +260,15 @@ export async function runLocalSeoAudit(
                 console.error(`[AutoSave] FAILED: ${result.error}`);
             } else {
                 console.log(`[AutoSave] SUCCESS: Data persisted for ${leadMeta.name}`);
+                if (result.data?.company) {
+                    finalCompanyId = result.data.company.id;
+                }
             }
         }
 
         return {
             data: {
+                companyId: finalCompanyId,
                 score: scrape.totalScore,
                 email: scrape.emails[0]?.email || '',
                 biggestWeakness: scrape.biggestWeakness,
@@ -313,6 +322,64 @@ export async function updateLeadStatusAction(companyId: string, newStatus: strin
 
     revalidatePath('/pipeline')
     return { data }
+}
+
+export async function updateLeadManualData(
+    companyId: string,
+    updates: {
+        manual_notes?: string;
+        ig_followers?: number | null;
+        ig_activity?: string | null;
+        manual_email?: string;
+        manual_phone?: string;
+    }
+) {
+    const supabase = await createClient()
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) return { error: 'Not authenticated' }
+
+    // 1. Update company-level fields
+    const companyUpdate: Record<string, any> = {}
+    if (updates.manual_notes !== undefined) companyUpdate.manual_notes = updates.manual_notes
+    if (updates.ig_followers !== undefined) companyUpdate.ig_followers = updates.ig_followers
+    if (updates.ig_activity !== undefined) companyUpdate.ig_activity = updates.ig_activity
+    if (updates.manual_phone) companyUpdate.phone = updates.manual_phone
+
+    if (Object.keys(companyUpdate).length > 0) {
+        const { error } = await supabase
+            .from('companies')
+            .update(companyUpdate)
+            .eq('id', companyId)
+        if (error) {
+            console.error("Error updating manual data:", error)
+            return { error: error.message }
+        }
+    }
+
+    // 2. Add manual email to contacts table if provided
+    if (updates.manual_email) {
+        // Check if this email already exists for this company
+        const { data: existing } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('email', updates.manual_email)
+            .limit(1)
+
+        if (!existing || existing.length === 0) {
+            await supabase.from('contacts').insert([{
+                company_id: companyId,
+                email: updates.manual_email,
+                type: 'personal',
+                confidence: 100
+            }])
+        }
+    }
+
+    revalidatePath('/pipeline')
+    revalidatePath('/lead-finder')
+    return { success: true }
 }
 
 export async function fetchLeadsPaginated(opts: {
@@ -402,4 +469,20 @@ export async function fetchPipelineLeads() {
     }
 
     return { data: data || [] };
+}
+export async function updateLeadStatus(companyId: string, status: string) {
+    const supabase = await createClient()
+    const { error } = await supabase
+        .from('companies')
+        .update({ status })
+        .eq('id', companyId)
+
+    if (error) {
+        console.error("Error updating status:", error)
+        return { error: error.message }
+    }
+
+    revalidatePath('/lead-finder')
+    revalidatePath('/pipeline')
+    return { success: true }
 }
