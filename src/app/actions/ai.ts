@@ -6,7 +6,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function generateOutreachSuggestions(leadData: any) {
     if (!process.env.GEMINI_API_KEY) {
-        return { error: 'Gemini API key is not configured.' };
+        return { 
+            error: 'Gemini API key is not configured. Please add "GEMINI_API_KEY" to your environment variables (e.g., in the Vercel Dashboard) and redeploy.' 
+        };
     }
 
     try {
