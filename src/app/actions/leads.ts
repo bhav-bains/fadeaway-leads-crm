@@ -324,6 +324,7 @@ export async function updateLeadManualData(
         ig_activity?: string | null;
         manual_email?: string;
         manual_phone?: string;
+        instagram_url?: string;
     }
 ) {
     const supabase = await createClient()
@@ -337,6 +338,7 @@ export async function updateLeadManualData(
     if (updates.ig_followers !== undefined) companyUpdate.ig_followers = updates.ig_followers
     if (updates.ig_activity !== undefined) companyUpdate.ig_activity = updates.ig_activity
     if (updates.manual_phone) companyUpdate.phone = updates.manual_phone
+    if (updates.instagram_url !== undefined) companyUpdate.instagram_url = updates.instagram_url
 
     if (Object.keys(companyUpdate).length > 0) {
         const { error } = await supabase

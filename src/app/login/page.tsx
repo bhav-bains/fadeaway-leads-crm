@@ -23,7 +23,7 @@ export default async function LoginPage({
                     </div>
                     
                     <div className="max-w-xl">
-                        <h1 className="text-5xl sm:text-6xl lg:text-7xl font-heading font-black leading-[1.05] tracking-tight mb-4 lg:mb-10">
+                        <h1 className="text-5xl sm:text-6xl lg:text-7xl font-heading leading-[1.05] mb-4 lg:mb-10">
                             Dominate Search
                             <br className="hidden sm:block" />
                             <span className="text-brand"> Results.</span>

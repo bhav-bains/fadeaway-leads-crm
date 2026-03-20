@@ -99,7 +99,7 @@ export default async function Home() {
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 shrink-0">
           <div className="space-y-2">
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tighter uppercase font-heading">
+            <h1 className="text-4xl sm:text-5xl uppercase font-heading">
               Performance Dashboard<span className="text-brand">.</span>
             </h1>
           </div>
@@ -123,7 +123,7 @@ export default async function Home() {
             <QuoteIcon className="h-24 w-24 text-brand rotate-12" />
           </div>
           <div className="relative z-10 flex flex-col gap-2">
-            <p className="text-2xl font-heading font-black italic tracking-tight text-white max-w-2xl leading-tight">
+            <p className="text-2xl font-heading italic text-white max-w-2xl leading-tight">
               "{dailyQuote}"
             </p>
           </div>

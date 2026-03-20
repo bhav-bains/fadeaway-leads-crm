@@ -32,7 +32,7 @@ export function Sidebar({ className }: SidebarProps) {
     return (
         <div
             className={cn(
-                "relative flex h-screen flex-col border-r border-zinc-800/50 bg-zinc-950 transition-all duration-300 overflow-hidden font-sans",
+                "relative flex min-h-screen flex-col border-r border-zinc-800 bg-zinc-950 transition-all duration-300 font-sans",
                 isCollapsed ? "w-[80px]" : "w-64",
                 className
             )}
@@ -44,7 +44,7 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="relative z-10 flex h-20 items-center border-b border-zinc-800/30 px-8 justify-between">
                 {!isCollapsed && (
                     <Link href="/" className="flex items-center gap-2 group">
-                        <span className="text-xl font-heading font-black tracking-tighter text-white group-hover:text-brand transition-colors uppercase">
+                        <span className="text-xl font-heading text-white group-hover:text-brand transition-colors uppercase">
                             Fadeaway<span className="text-brand ml-0.5">.</span>
                         </span>
                     </Link>
@@ -108,14 +108,14 @@ export function MobileSidebar() {
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger className="md:hidden inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-zinc-900 text-zinc-400 h-10 w-10">
+            <SheetTrigger className="lg:hidden inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-zinc-900 text-zinc-400 h-10 w-10">
                 <PanelLeftOpen className="h-5 w-5" />
                 <span className="sr-only">Toggle navigation menu</span>
             </SheetTrigger>
             <SheetContent side="left" className="flex w-64 flex-col p-0 bg-zinc-950 border-r border-zinc-800/50">
                 <div className="flex h-20 items-center border-b border-zinc-800/30 px-8">
                     <Link href="/" className="flex items-center gap-2">
-                        <span className="text-xl font-heading font-black tracking-tighter text-white uppercase">
+                        <span className="text-xl font-heading text-white uppercase">
                             Fadeaway<span className="text-brand ml-0.5">.</span>
                         </span>
                     </Link>
