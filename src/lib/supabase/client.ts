@@ -28,6 +28,34 @@ export function createClient() {
         }
         return { data, error };
     };
+
+    const originalFrom = supabase.from.bind(supabase);
+    (supabase as any).from = (table: string) => {
+        if (table === 'profiles') {
+            const realQuery = originalFrom(table);
+            return {
+                select: (columns?: string) => ({
+                    eq: (column: string, value: any) => ({
+                        single: async () => {
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (user?.id === '00000000-0000-0000-0000-000000000000') {
+                                return { 
+                                    data: { 
+                                        id: '00000000-0000-0000-0000-000000000000',
+                                        workspace_id: '00000000-0000-0000-0000-000000000000',
+                                        full_name: 'Mock Developer'
+                                    }, 
+                                    error: null 
+                                };
+                            }
+                            return realQuery.select(columns as any).eq(column as any, value).single();
+                        }
+                    })
+                })
+            } as any;
+        }
+        return originalFrom(table);
+    };
   }
 
   return supabase;

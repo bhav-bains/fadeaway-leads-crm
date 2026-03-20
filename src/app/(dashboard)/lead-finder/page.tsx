@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram, Activity, Code2, Terminal, Clock, Link as LinkIcon, TrendingUp, Phone, MessageSquare, Users, PenLine, Save, Wand2, Sparkles, Loader2 } from "lucide-react";
+import { Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram, Activity, Code2, Terminal, Clock, Link as LinkIcon, TrendingUp, Phone, MessageSquare, Users, PenLine, Save, Wand2, Sparkles, Loader2, Star } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -373,20 +373,23 @@ export default function LeadFinder() {
     const filteredResultsCount = groupedResultsArray.reduce((sum, g) => sum + g.groupLeads.length, 0);
 
     return (
-        <div className="flex flex-col gap-6 pb-12 w-full min-w-0">
-            <div>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Lead Finder (SEO Auditor)</h1>
-                <p className="text-sm md:text-base text-muted-foreground mt-2">
-                    Hunt down highly successful local businesses that have massive digital and SEO gaps.
+        <div className="flex flex-col gap-10 pb-12 w-full min-w-0 bg-zinc-950 text-zinc-100 font-sans p-8 sm:p-12 min-h-screen">
+            <div className="flex flex-col gap-2">
+                <h1 className="text-4xl sm:text-5xl font-black tracking-tighter uppercase font-heading">
+                    Lead Finder<span className="text-brand">.</span>
+                </h1>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand/80 flex items-center gap-3">
+                    <span className="h-[1px] w-4 bg-brand/50"></span>
+                    SOURCED LEADS ENGINE
                 </p>
             </div>
 
-            <Card className="border-primary/10 bg-primary/5">
+            <Card className="rounded-2xl border border-zinc-800/50 bg-zinc-900/40 p-1 shadow-sm backdrop-blur-sm overflow-visible isolate">
                 <CardHeader className="pb-4">
-                    <CardTitle>Sourced Leads Engine</CardTitle>
-                    <CardDescription>Enter a Niche and City to scrape Google and instantly add fresh businesses into your Inbox.</CardDescription>
+                    <CardTitle className="text-sm font-bold uppercase tracking-[0.1em] text-zinc-400">Search Parameters</CardTitle>
+                    <CardDescription className="text-zinc-500 text-xs">Enter a Niche and City to scrape Google and instantly add fresh businesses into your Inbox.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="overflow-visible">
                     <form onSubmit={handleSearch} className="flex flex-col lg:flex-row gap-4 items-start lg:items-end w-full min-w-0">
                         <div className="grid gap-2 w-full lg:flex-1 min-w-0">
                             <Label htmlFor="niche" className="font-semibold text-foreground/80">Business Niche</Label>
@@ -395,85 +398,101 @@ export default function LeadFinder() {
                                 <Input
                                     id="niche"
                                     placeholder="e.g. Plumber, Roofing, Dentist"
-                                    className="pl-9 bg-background w-full"
+                                    className="pl-9 bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 w-full autofill:shadow-[0_0_0_30px_#09090b_inset] [selection:color:white] autofill:[-webkit-text-fill-color:white] autofill:text-zinc-100"
                                     value={niche}
                                     onChange={(e) => setNiche(e.target.value)}
                                 />
                             </div>
                         </div>
-                        <div className="grid gap-2 w-full lg:flex-1 min-w-0">
-                            <Label htmlFor="city" className="font-semibold text-foreground/80">Target City</Label>
-                            <Popover open={isCityDropdownOpen} onOpenChange={setIsCityDropdownOpen}>
-                                <PopoverTrigger render={
-                                    <Button
-                                        variant="outline"
-                                        role="combobox"
-                                        aria-expanded={isCityDropdownOpen}
-                                        className={cn(
-                                            "w-full justify-between pl-3 font-normal bg-background",
-                                            !city && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <div className="flex items-center truncate">
-                                            <MapPin className="h-4 w-4 mr-2 text-muted-foreground shrink-0" />
-                                            <span className="truncate">{city || "e.g. Seattle, Toronto..."}</span>
-                                        </div>
-                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                    </Button>
-                                } />
-                                <PopoverContent className="w-[300px] p-0" align="start">
-                                    <Command shouldFilter={false}>
-                                        <CommandInput
-                                            placeholder="Search a city..."
-                                            value={citySearchTerm}
-                                            onValueChange={handleCitySearch}
-                                        />
-                                        <CommandList>
-                                            <CommandEmpty>
-                                                {isSearchingCity ? "Searching Maps..." : "No city found."}
-                                            </CommandEmpty>
-                                            <CommandGroup>
-                                                {citySuggestions.map((suggestion) => (
-                                                    <CommandItem
-                                                        key={suggestion.id}
-                                                        value={suggestion.description}
-                                                        onSelect={(currentValue) => {
-                                                            setCity(suggestion.description);
-                                                            setCitySearchTerm(suggestion.description);
-                                                            setIsCityDropdownOpen(false);
-                                                        }}
-                                                    >
-                                                        <Check
-                                                            className={cn(
-                                                                "mr-2 h-4 w-4 shrink-0",
-                                                                city === suggestion.description ? "opacity-100" : "opacity-0"
-                                                            )}
-                                                        />
-                                                        {suggestion.description}
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
+                        <div className="grid gap-2 w-full lg:flex-1 min-w-0 relative">
+                            <Label htmlFor="city" className="font-bold text-[10px] uppercase tracking-widest text-zinc-500">Target City</Label>
+                            <div className="relative w-full">
+                                <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500 z-10" />
+                                <Input
+                                    id="city"
+                                    placeholder="e.g. Seattle, Toronto..."
+                                    className="pl-9 bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 w-full focus-visible:ring-brand/50 autofill:shadow-[0_0_0_30px_#09090b_inset] [selection:color:white] autofill:[-webkit-text-fill-color:white] autofill:text-zinc-100"
+                                    value={citySearchTerm}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        handleCitySearch(val);
+                                        if (val.length >= 2) {
+                                            setIsCityDropdownOpen(true);
+                                        } else {
+                                            setIsCityDropdownOpen(false);
+                                        }
+                                    }}
+                                    onFocus={() => {
+                                        if (citySearchTerm.length >= 2) {
+                                            setIsCityDropdownOpen(true);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        // Delay closing to allow clicking suggestions
+                                        setTimeout(() => setIsCityDropdownOpen(false), 200);
+                                    }}
+                                    autoComplete="off"
+                                />
+
+                                {isCityDropdownOpen && citySearchTerm.length >= 2 && (
+                                    <div className="absolute top-[calc(100%+4px)] left-0 w-full z-[100] bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl animate-in fade-in duration-200">
+                                        <Command shouldFilter={false} className="bg-zinc-900">
+                                            <CommandList>
+                                                <CommandEmpty className="text-zinc-500 py-4 text-center text-xs">
+                                                    {isSearchingCity ? (
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <Loader2 className="h-3 w-3 animate-spin text-brand" />
+                                                            <span>Searching Maps...</span>
+                                                        </div>
+                                                    ) : "No city found."}
+                                                </CommandEmpty>
+                                                {citySuggestions.length > 0 && (
+                                                    <CommandGroup heading="Suggestions" className="text-zinc-500 px-2 pt-2">
+                                                        {citySuggestions.map((suggestion) => (
+                                                            <CommandItem
+                                                                key={suggestion.id}
+                                                                value={suggestion.description}
+                                                                className="text-zinc-300 aria-selected:bg-brand/10 aria-selected:text-brand cursor-pointer rounded-lg mb-1 transition-colors"
+                                                                onSelect={() => {
+                                                                    setCity(suggestion.description);
+                                                                    setCitySearchTerm(suggestion.description);
+                                                                    setIsCityDropdownOpen(false);
+                                                                }}
+                                                            >
+                                                                <div className="flex items-center gap-2 py-1">
+                                                                    <MapPin className="h-3 w-3 opacity-50" />
+                                                                    <span className="text-sm">{suggestion.description}</span>
+                                                                </div>
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                )}
+                                            </CommandList>
+                                        </Command>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <Button type="submit" disabled={isSearching || isLoadingInitial} className="w-full lg:w-auto font-medium px-8 shrink-0">
+                        <Button 
+                            type="submit" 
+                            disabled={isSearching || isLoadingInitial} 
+                            className="w-full lg:w-auto font-black uppercase tracking-widest text-[10px] px-8 shrink-0 bg-brand hover:bg-brand/90 text-zinc-950 h-10 transition-all active:scale-95 shadow-[0_0_15px_rgba(255,102,0,0.2)]"
+                        >
                             {isSearching ? (
-                                <>
-                                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                <Fragment>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                     Scraping...
-                                </>
+                                </Fragment>
                             ) : isLoadingInitial ? (
-                                <>
-                                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                <Fragment>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                     Loading...
-                                </>
+                                </Fragment>
                             ) : (
-                                <>
+                                <Fragment>
                                     <Search className="h-4 w-4 mr-2" />
                                     Run Fast Search
-                                </>
+                                </Fragment>
                             )}
                         </Button>
                     </form>
@@ -482,292 +501,163 @@ export default function LeadFinder() {
 
             {results.length > 0 && (
                 <div className="space-y-4 animate-in fade-in duration-500">
-                    <div className="flex items-center justify-between px-1">
-                        <h3 className="text-lg font-medium text-foreground/80">
-                            Inbox contains <span className="font-bold text-foreground">{filteredResultsCount}</span> Master Leads
+                    <div className="flex items-center gap-3">
+                        <div className="flex-1 h-[1px] bg-zinc-800"></div>
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-brand/80">
+                            Inbox: <span className="text-white">{filteredResultsCount}</span> Master Leads
                         </h3>
+                        <div className="flex-1 h-[1px] bg-zinc-800"></div>
                     </div>
 
                     {/* Filters Bar */}
-                    <Card className="min-w-0 w-full overflow-hidden">
-                        <CardContent className="p-4 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-6 bg-slate-50 border-b min-w-0 w-full">
-                            <div className="flex flex-col gap-2 w-full sm:flex-1 min-w-[200px]">
-                                <div className="flex justify-between w-full">
-                                    <Label className="text-xs font-semibold text-muted-foreground">Min SEO Score</Label>
-                                    <span className="text-xs font-bold">{minScore[0]}/20</span>
-                                </div>
-                                <Slider
-                                    min={0} max={20} step={1}
-                                    value={minScore}
-                                    onValueChange={(v) => setMinScore(v as number[])}
-                                    className="w-full"
-                                />
-                            </div>
-
-                            <div className="flex items-center space-x-2 w-full sm:w-auto">
-                                <Checkbox id="has-email" checked={requireEmail} onCheckedChange={(c) => setRequireEmail(c as boolean)} />
-                                <Label htmlFor="has-email" className="text-sm cursor-pointer">Has Scraped Email</Label>
-                            </div>
-
-                            <div className="flex flex-col gap-1 w-full sm:w-auto sm:ml-auto">
-                                <Select value={ratingFilter} onValueChange={(v) => setRatingFilter(v as string)}>
-                                    <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">
-                                        <SelectValue placeholder="Rating Filter" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Google Ratings</SelectItem>
-                                        <SelectItem value="high">4.0 Stars and Up</SelectItem>
-                                        <SelectItem value="low">Under 4.0 Stars</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                    {/* Filters Bar - Hidden for Phase 1 as per user request */}
+                    {/* <Card className="min-w-0 w-full overflow-hidden border-zinc-800 bg-zinc-900/20">
+                        <CardContent className="p-4 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-6 border-b border-zinc-800 min-w-0 w-full">
+...
                         </CardContent>
-                    </Card>
+                    </Card> */}
 
-                    {/* Bulk Actions Bar */}
-                    {selectedIds.size > 0 && (
-                        <div className="bg-primary text-primary-foreground py-3 px-4 rounded-md flex flex-col sm:flex-row items-center justify-between gap-3 sticky top-4 z-10 shadow-lg animate-in slide-in-from-bottom-2">
-                            <span className="font-semibold text-sm text-center sm:text-left w-full sm:w-auto">{selectedIds.size} Leads Selected</span>
-                            <div className="flex items-center gap-3 w-full sm:w-auto justify-center sm:justify-start">
-                                <Button variant="secondary" size="sm" onClick={handleExportCSV} className="h-8">
-                                    <Download className="h-4 w-4 mr-2" /> Export CSV
-                                </Button>
-                                <Button variant="secondary" size="sm" onClick={handleBulkAudit} className="h-8">
-                                    <Search className="h-4 w-4 mr-2" /> Run Audit
-                                </Button>
-                                <Button id="bulk-assign-btn" variant="default" size="sm" onClick={handleBulkPipeline} className="h-8 bg-black text-white hover:bg-black/80">
-                                    <Send className="h-4 w-4 mr-2" /> Save to Pipeline
-                                </Button>
-                            </div>
-                        </div>
-                    )}
 
                     {/* Dense Data Table */}
-                    <div className="rounded-md border bg-card w-full min-w-0 overflow-hidden">
-                        <div className="overflow-x-auto w-full max-w-full">
-                            <Table className="min-w-[800px] w-full">
-                                <TableHeader className="bg-muted/50">
-                                    <TableRow>
-                                        <TableHead className="w-[50px]">
-                                            <Checkbox
-                                                checked={selectedIds.size === filteredResultsCount && filteredResultsCount > 0}
-                                                onCheckedChange={handleSelectAll}
-                                            />
-                                        </TableHead>
-                                        <TableHead className="w-[280px]">Business & City</TableHead>
-                                        <TableHead>Rating</TableHead>
-                                        <TableHead>Audit Intel</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {filteredResultsCount === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                                                No leads match the current filters.
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        groupedResultsArray.map(({ groupName, groupLeads }, index) => {
-                                            const expanded = isGroupExpanded(groupName, index);
+                    <div className="space-y-12">
+                        {filteredResultsCount === 0 ? (
+                            <div className="h-48 flex flex-col items-center justify-center border border-zinc-800 border-dashed rounded-3xl text-zinc-500 gap-2">
+                                <AlertCircle className="h-6 w-6 opacity-20" />
+                                <p className="text-xs font-bold uppercase tracking-widest opacity-40">No leads match the current filters.</p>
+                            </div>
+                        ) : (
+                            groupedResultsArray.map(({ groupName, groupLeads }, groupIndex) => {
+                                const expanded = isGroupExpanded(groupName, groupIndex);
 
-                                            return (
-                                                <Fragment key={groupName}>
-                                                    <TableRow
-                                                        className="bg-slate-100/50 hover:bg-slate-200/50 cursor-pointer"
-                                                        onClick={() => toggleGroup(groupName, index)}
-                                                    >
-                                                        <TableCell colSpan={5} className="py-3 font-semibold text-sm text-foreground/80 border-b-2">
-                                                            <div className="flex items-center select-none">
-                                                                {expanded ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
-                                                                {groupName}
-                                                                <span className="text-xs font-normal text-muted-foreground ml-2">({groupLeads.length} leads)</span>
-                                                                {(() => {
-                                                                    const auditedCount = groupLeads.filter((l: any) => auditedLeads[l.id]).length;
-                                                                    return auditedCount > 0 ? (
-                                                                        <span className="text-xs font-medium text-green-600 ml-1.5">· {auditedCount} audited</span>
-                                                                    ) : null;
-                                                                })()}
-                                                                {!expanded && (
-                                                                    <Badge variant="outline" className="ml-auto text-[10px] uppercase font-bold text-muted-foreground mr-4">Click to View</Badge>
-                                                                )}
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
+                                return (
+                                    <div key={groupName} className="space-y-6">
+                                        <div 
+                                            className="flex items-center gap-4 cursor-pointer group/header select-none"
+                                            onClick={() => toggleGroup(groupName, groupIndex)}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div className={cn(
+                                                    "p-1 rounded-md bg-zinc-900 border border-zinc-700/50 group-hover/header:border-brand/50 transition-all",
+                                                    expanded && "border-brand/30"
+                                                )}>
+                                                    {expanded ? <ChevronDown className="h-4 w-4 text-brand" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
+                                                </div>
+                                                <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-100 group-hover/header:text-brand transition-colors">
+                                                    {groupName}
+                                                </h4>
+                                                <Badge variant="outline" className="bg-brand/5 border-brand/20 text-brand text-[9px] font-black tracking-widest px-2.5 h-6 rounded-full shadow-[0_0_10px_rgba(255,102,0,0.1)]">
+                                                    {groupLeads.length} DEPOSITED
+                                                </Badge>
+                                            </div>
+                                            <div className="flex-1 h-[2px] bg-gradient-to-r from-zinc-800 to-transparent"></div>
+                                        </div>
 
-                                                    {expanded && groupLeads.map((result: any) => {
-                                                        const auditData = auditedLeads[result.id];
-                                                        const isAuditingRow = isAuditing[result.id];
+                                        {expanded && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                {groupLeads.map((result: any) => {
+                                                    const auditData = auditedLeads[result.id];
+                                                    const inPipeline = leads.some(l => l.name === result.name);
 
-                                                        return (
-                                                            <TableRow key={result.id} className={`${leads.some(l => l.name === result.name) ? "opacity-40" : "hover:bg-slate-50/80"} transition-colors border-l-[3px] ${auditData ? 'border-l-emerald-400' : 'border-l-transparent'}`}>
-                                                                <TableCell className="w-[50px] pl-4">
-                                                                    <Checkbox
-                                                                        checked={selectedIds.has(result.id)}
-                                                                        onCheckedChange={(c) => handleSelectRow(result.id, c as boolean)}
-                                                                        className="data-[state=checked]:bg-primary"
-                                                                    />
-                                                                </TableCell>
-                                                                <TableCell className="font-medium py-3">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className={`h-2 w-2 rounded-full shrink-0 ${auditData ? 'bg-emerald-400' : 'bg-slate-300'}`} />
-                                                                        <div className="truncate font-semibold text-[14px] max-w-[220px]" title={result.name}>{result.name}</div>
-                                                                        {result.website ? (
-                                                                            <a href={result.website.startsWith('http') ? result.website : `https://${result.website}`} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors hover:scale-110" title="Visit Website">
-                                                                                <ExternalLink className="h-3.5 w-3.5" />
-                                                                            </a>
-                                                                        ) : (
-                                                                            <Badge variant="destructive" className="h-[18px] text-[9px] px-1.5 py-0 uppercase tracking-wider font-bold">No Site</Badge>
-                                                                        )}
+                                                    return (
+                                                        <div 
+                                                            key={result.id}
+                                                            className={cn(
+                                                                "relative group cursor-pointer transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]",
+                                                                inPipeline && "opacity-[0.6] grayscale-[0.5]"
+                                                            )}
+                                                            onClick={() => setDrawerLead({ ...result, auditData })}
+                                                        >
+                                                            <Card className="h-full rounded-2xl border border-zinc-800/80 bg-zinc-950/40 p-5 shadow-2xl backdrop-blur-md group-hover:border-brand/40 group-hover:bg-zinc-900/40 group-hover:shadow-[0_0_30px_rgba(255,102,0,0.03)] transition-all duration-300 isolate">
+                                                                <div className="flex flex-col h-full gap-4">
+                                                                    <div className="flex justify-between items-start gap-3">
+                                                                        <div className="bg-zinc-950 p-2.5 rounded-xl border border-zinc-800 group-hover:border-brand/20 transition-colors">
+                                                                            <Building2 className="h-4 w-4 text-brand" />
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 bg-zinc-950/60 border border-zinc-800/80 px-2.5 py-1.5 rounded-xl group-hover:border-brand/30 transition-all shadow-inner">
+                                                                            <div className="flex items-center gap-1">
+                                                                                <Star className="h-3 w-3 text-brand fill-brand" />
+                                                                                <span className="text-[11px] font-black text-zinc-100">{result.rating || '0.0'}</span>
+                                                                            </div>
+                                                                            <div className="w-[1px] h-3 bg-zinc-800"></div>
+                                                                            <div className="flex flex-col leading-none">
+                                                                                <span className="text-[10px] font-black text-brand tracking-tight">
+                                                                                    {result.ratingCount || 0}
+                                                                                </span>
+                                                                                <span className="text-[7px] font-bold text-zinc-500 uppercase tracking-widest">
+                                                                                    Reviews
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="text-[11px] text-muted-foreground mt-0.5 truncate max-w-[220px] pl-4" title={auditData?.biggestWeakness}>
-                                                                        {auditData?.biggestWeakness || (
-                                                                            <span className="italic text-slate-400">Awaiting audit</span>
-                                                                        )}
+                                                                    
+                                                                    <div className="space-y-1.5 flex-1">
+                                                                        <h3 className="text-[17px] font-sans font-bold tracking-tight leading-snug uppercase line-clamp-2 text-zinc-100 group-hover:text-white transition-colors">
+                                                                            {result.name}
+                                                                        </h3>
+                                                                        <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] font-bold uppercase tracking-widest">
+                                                                            <MapPin className="h-3 w-3 shrink-0 text-zinc-500" />
+                                                                            <span className="truncate">{result.city}</span>
+                                                                        </div>
                                                                     </div>
-                                                                </TableCell>
-                                                                <TableCell className="py-3">
-                                                                    <div className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200/60 rounded-full px-2.5 py-1 text-sm font-medium">
-                                                                        <span className="text-amber-500">★</span> {result.rating}
-                                                                        <span className="text-[11px] text-amber-500/70 font-normal">({result.ratingCount})</span>
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="py-3">
-                                                                    {auditData ? (
-                                                                        <div className="flex items-center gap-2.5">
-                                                                            {(() => {
-                                                                                const score = auditData.rawScrape?.scoreBreakdown?.total ?? auditData.score ?? 0;
-                                                                                const bg = score >= 60 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : score >= 30 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-200';
-                                                                                return <span className={`inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full border ${bg}`}>{score}/100</span>;
-                                                                            })()}
-                                                                            {auditData.email && (
-                                                                                <a href={`mailto:${auditData.email}`} className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200/50 rounded-full px-2 py-0.5 truncate max-w-[180px] transition-colors" title={auditData.email}>
-                                                                                    <Mail className="h-3 w-3 flex-shrink-0" />{auditData.email}
-                                                                                </a>
+
+                                                                    <div className="mt-auto pt-4 border-t border-zinc-800/50 flex items-center justify-between">
+                                                                        <div className="flex -space-x-2">
+                                                                            {result.website && (
+                                                                                <div className="h-6 w-6 rounded-full bg-zinc-800 border-2 border-zinc-900 flex items-center justify-center" title="Website Available">
+                                                                                    <Globe className="h-3 w-3 text-blue-400" />
+                                                                                </div>
                                                                             )}
-                                                                            {auditData.rawScrape?.enrichment?.socials?.instagram && (
-                                                                                <a href={auditData.rawScrape.enrichment.socials.instagram.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] text-pink-600 hover:text-pink-800 bg-pink-50 hover:bg-pink-100 border border-pink-200/50 rounded-full px-2 py-0.5 transition-colors shrink-0">
-                                                                                    <Instagram className="h-3 w-3 flex-shrink-0" />
-                                                                                    {auditData.rawScrape.enrichment.socials.instagram.handle || 'IG'}
-                                                                                </a>
+                                                                            {result.phone && (
+                                                                                <div className="h-6 w-6 rounded-full bg-zinc-800 border-2 border-zinc-900 flex items-center justify-center" title="Phone Available">
+                                                                                    <Phone className="h-3 w-3 text-emerald-400" />
+                                                                                </div>
                                                                             )}
                                                                         </div>
-                                                                    ) : (
-                                                                        <span className="text-xs text-slate-300 italic">—</span>
-                                                                    )}
-                                                                </TableCell>
-                                                                <TableCell className="text-right py-3 pr-4">
-                                                                    <div className="flex items-center justify-end gap-2">
-                                                                        {!auditData ? (
-                                                                            <Button
-                                                                                size="sm"
-                                                                                className="h-10 px-6 font-bold text-white bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-[1.03] rounded-xl border-0"
-                                                                                onClick={() => handleRunAudit(result)}
-                                                                                disabled={isAuditingRow}
-                                                                            >
-                                                                                {isAuditingRow ? (
-                                                                                    <><div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" /> Auditing...</>
-                                                                                ) : (
-                                                                                    <><Search className="h-4 w-4 mr-2" /> Run Audit</>
-                                                                                )}
-                                                                            </Button>
-                                                                        ) : (
-                                                                            <>
-                                                                                <Button
-                                                                                    size="sm"
-                                                                                    variant="outline"
-                                                                                    className="h-9 px-4 font-medium border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-lg"
-                                                                                    onClick={() => setDrawerLead({ ...result, auditData })}
-                                                                                >
-                                                                                    <Eye className="h-4 w-4 mr-1.5" /> View Data
-                                                                                </Button>
-                                                                                <Button
-                                                                                     size="sm"
-                                                                                     className={cn(
-                                                                                        "h-9 px-4 font-bold text-white transition-all rounded-lg border-0",
-                                                                                        result.status === 'Contacted' 
-                                                                                            ? "bg-slate-200 text-slate-500 cursor-not-allowed shadow-none" 
-                                                                                            : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm hover:shadow-md"
-                                                                                     )}
-                                                                                     onClick={async () => {
-                                                                                         if (result.status === 'Contacted') return;
-                                                                                         setReachoutLead({ ...result, auditData });
-                                                                                         setAiSuggestions(null);
-                                                                                         setIsGeneratingAI(true);
-                                                                                        
-                                                                                        try {
-                                                                                            const res = await generateOutreachSuggestions({
-                                                                                                name: result.name,
-                                                                                                niche: result.niche || niche,
-                                                                                                city: result.city || city,
-                                                                                                website: result.website,
-                                                                                                manualNotes: result.manual_notes,
-                                                                                                igFollowers: result.ig_followers,
-                                                                                                igActivity: result.ig_activity,
-                                                                                                score: auditData?.score,
-                                                                                                seoScore: auditData?.rawScrape?.scoreBreakdown?.uxDecayTechnical,
-                                                                                                contactabilityScore: auditData?.rawScrape?.scoreBreakdown?.contactability,
-                                                                                                localIntentScore: auditData?.rawScrape?.scoreBreakdown?.cashFlowMaturity,
-                                                                                                biggestWeakness: auditData?.biggestWeakness,
-                                                                                                keywords: auditData?.rawScrape?.enrichment?.expansionKeywords, rawAudit: auditData?.rawScrape
-                                                                                            });
-                                                                                       if (res.data) setAiSuggestions(res.data);
-                                                                                         else toast.error(res.error || "AI generation failed");
-                                                                                         } catch (e) {
-                                                                                             toast.error("Failed to generate AI pitch");
-                                                                                         } finally {
-                                                                                             setIsGeneratingAI(false);
-                                                                                         }
-                                                                                     }}
-                                                                                 >
-                                                                                     {result.status === 'Contacted' ? (
-                                                                                        <><Check className="h-4 w-4 mr-1.5" /> Contacted</>
-                                                                                     ) : (
-                                                                                        <><Wand2 className="h-3.5 w-3.5 mr-1.5" /> Reachout AI</>
-                                                                                     )}
-                                                                                 </Button>
-                                                                            </>
-                                                                        )}
+                                                                        <div className="text-[9px] font-black uppercase tracking-widest text-zinc-500 group-hover:text-brand transition-colors flex items-center gap-1">
+                                                                            {inPipeline ? 'In Pipeline' : 'View Intel'}
+                                                                            <ChevronRight className="h-3 w-3" />
+                                                                        </div>
                                                                     </div>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )
-                                                    })}
 
-                                                    {expanded && (() => {
-                                                        const targetNiche = groupLeads[0]?.niche || niche;
-                                                        const targetCity = groupLeads[0]?.city || city;
-                                                        const queryStr = normalizeQueryKey(targetNiche, targetCity);
-                                                        const hasToken = activeTokens[queryStr];
-                                                        const isLoading = isLoadingMore[queryStr];
+                                                                </div>
+                                                            </Card>
+                                                        </div>
+                                                    );
+                                                })}
 
-                                                        if (hasToken) {
-                                                            return (
-                                                                <TableRow>
-                                                                    <TableCell colSpan={4} className="text-center py-6 bg-slate-50/50 border-b-2">
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            onClick={() => handleLoadMore(targetNiche, targetCity, hasToken)}
-                                                                            disabled={isLoading}
-                                                                            className="bg-white"
-                                                                        >
-                                                                            {isLoading ? <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <Search className="h-4 w-4 mr-2" />}
-                                                                            {isLoading ? 'Fetching Leads...' : 'Load 20 More Leads'}
-                                                                        </Button>
-                                                                        <p className="text-xs text-muted-foreground mt-2">There are more undiscovered businesses available for this search.</p>
-                                                                    </TableCell>
-                                                                </TableRow>
-                                                            );
-                                                        }
-                                                        return null;
-                                                    })()}
-                                                </Fragment>
-                                            )
-                                        })
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
+                                                {(() => {
+                                                    const targetNiche = groupLeads[0]?.niche || niche;
+                                                    const targetCity = groupLeads[0]?.city || city;
+                                                    const queryStr = normalizeQueryKey(targetNiche, targetCity);
+                                                    const hasToken = activeTokens[queryStr];
+                                                    const isLoading = isLoadingMore[queryStr];
+
+                                                    if (hasToken) {
+                                                        return (
+                                                            <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 py-8 flex flex-col items-center justify-center gap-4">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    onClick={() => handleLoadMore(targetNiche, targetCity, hasToken)}
+                                                                    disabled={isLoading}
+                                                                    className="rounded-xl border-dashed border-2 border-zinc-800 bg-transparent hover:bg-zinc-900 hover:border-brand/40 text-zinc-500 hover:text-white transition-all px-10 h-14"
+                                                                >
+                                                                    {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <TrendingUp className="h-4 w-4 mr-2" />}
+                                                                    <span className="font-black uppercase tracking-widest text-xs">
+                                                                        {isLoading ? 'Fetching Leads...' : 'Dig Deeper: Load 20 More Leads'}
+                                                                    </span>
+                                                                </Button>
+                                                                <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-zinc-700">More undiscovered successful businesses found</p>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
             )}
@@ -779,35 +669,48 @@ export default function LeadFinder() {
                         const enrichment: EnrichmentData | undefined = audit?.rawScrape?.enrichment;
 
                         return (
-                            <div className="flex flex-col h-full bg-slate-50 w-full overflow-hidden focus-visible:outline-none">
+                            <div className="flex flex-col h-full bg-zinc-950 text-zinc-100 w-full overflow-hidden focus-visible:outline-none">
                                 {/* Header */}
-                                <div className="px-6 py-5 border-b shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-md relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
-                                    <div className="relative z-10 flex flex-col">
-                                        <SheetTitle className="text-2xl font-black tracking-tight text-white mb-1.5 leading-tight">{drawerLead.name}</SheetTitle>
-                                        <SheetDescription className="flex flex-wrap items-center text-blue-100 text-sm font-medium mt-0.5">
-                                            <span className="flex items-center"><MapPin className="h-3.5 w-3.5 mr-1" /> {drawerLead.city}</span>
-                                            {drawerLead.niche && <span className="ml-3 flex items-center opacity-90"><Building2 className="h-3.5 w-3.5 mr-1" />{drawerLead.niche}</span>}
+                                <div className="px-6 py-8 border-b border-zinc-900 shrink-0 bg-zinc-950 relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-4 opacity-[0.05]">
+                                        <Building2 className="h-32 w-32 text-brand rotate-12" />
+                                    </div>
+                                    <div className="relative z-10 flex flex-col gap-2">
+                                        <div className="flex items-center gap-3">
+                                            <span className="h-[1px] w-4 bg-brand/50"></span>
+                                            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand/80">Business Intelligence</span>
+                                        </div>
+                                        <SheetTitle className="text-3xl font-heading font-black tracking-tighter text-white uppercase leading-tight">{drawerLead.name}</SheetTitle>
+                                        <SheetDescription className="flex flex-wrap items-center text-zinc-500 text-xs font-bold uppercase tracking-widest gap-4 mt-1">
+                                            <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-brand" /> {drawerLead.city}</span>
+                                            {drawerLead.niche && <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-brand" />{drawerLead.niche}</span>}
                                         </SheetDescription>
-                                        <div className="flex items-center gap-2 mt-4 text-sm bg-black/20 w-fit px-3 py-1.5 rounded-full backdrop-blur-sm shadow-inner border border-white/10">
-                                            <span className="flex items-center font-bold text-yellow-400">★ {drawerLead.rating}</span>
-                                            <span className="text-blue-100 text-xs font-semibold">({drawerLead.ratingCount} reviews)</span>
-                                            <div className="w-px h-3.5 bg-white/20 mx-1.5"></div>
+                                        <div className="flex items-center gap-2 mt-6">
+                                            <div className="flex items-center gap-2 bg-brand/10 border border-brand/20 px-3 py-1.5 rounded-xl">
+                                                <Star className="h-4 w-4 text-brand fill-brand" />
+                                                <span className="text-sm font-black text-brand italic">{drawerLead.rating}</span>
+                                                <span className="text-[10px] text-brand/60 font-bold uppercase tracking-tighter">({drawerLead.ratingCount} reviews)</span>
+                                            </div>
                                             {audit?.rawScrape?.scoreBreakdown ? (() => {
                                                 const sb: ScoreBreakdown = audit.rawScrape.scoreBreakdown;
-                                                return <span className="font-bold text-white flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-emerald-400"/> Score: {sb.total}/100</span>;
+                                                return <span className="font-bold text-white flex items-center gap-1.5 text-sm"><Activity className="h-4 w-4 text-emerald-400"/> Score: {sb.total}/100</span>;
                                             })() : audit?.score !== undefined && (
-                                                <span className="font-bold text-white flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-emerald-400"/> Score: {audit.score}/100</span>
+                                                <span className="font-bold text-white flex items-center gap-1.5 text-sm"><Activity className="h-4 w-4 text-emerald-400"/> Score: {audit.score}/100</span>
                                             )}
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto w-full p-6 space-y-5">
+                                <div className="flex-1 overflow-y-auto w-full p-6 space-y-8 bg-zinc-950/50">
                                     {!enrichment ? (
-                                        <div className="flex flex-col items-center justify-center p-12 bg-white rounded-2xl border shadow-sm border-dashed">
-                                            <div className="h-12 w-12 bg-blue-50 rounded-full flex items-center justify-center mb-4"><Search className="h-6 w-6 text-blue-500" /></div>
-                                            <span className="text-slate-500 font-medium text-center">No enrichment data accessible.<br/>Run an AI audit first.</span>
+                                        <div className="flex flex-col items-center justify-center p-12 rounded-3xl border border-zinc-800 border-dashed bg-zinc-900/20 text-zinc-500 gap-4">
+                                            <div className="h-16 w-16 bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-800 shadow-xl group">
+                                                <Search className="h-8 w-8 text-zinc-700 group-hover:text-brand transition-colors" />
+                                            </div>
+                                            <div className="text-center space-y-1">
+                                                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">No Deep Intel Available</p>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Run an AI audit to extract technical gaps and contacts.</p>
+                                            </div>
                                         </div>
                                     ) : (
                                         <>

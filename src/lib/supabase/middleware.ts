@@ -33,6 +33,9 @@ export async function updateSession(request: NextRequest) {
             data: { user },
         } = await supabase.auth.getUser()
 
+        const isAuthPage = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup');
+        const isMockUser = user?.id === '00000000-0000-0000-0000-000000000000';
+
         // Bouncer logic:
         // If user is NOT logged in and trying to access protected routes, redirect to /login
         const protectedRoutes = ['/', '/dashboard', '/pipeline', '/lead-finder', '/settings']
@@ -53,9 +56,9 @@ export async function updateSession(request: NextRequest) {
             return NextResponse.redirect(url)
         }
 
-        // If user IS logged in and trying to access /login or /signup, redirect to dashboard
-        if (user && (request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup'))) {
-            console.log(`[Middleware] Redirecting authenticated user to /dashboard from ${request.nextUrl.pathname}`);
+        // Redirect real authenticated users away from /login, but let the Mock User stay if they want to log in for real
+        if (user && !isMockUser && isAuthPage) {
+            console.log(`[Middleware] Redirecting real authenticated user to /dashboard from ${request.nextUrl.pathname}`);
             const url = request.nextUrl.clone()
             url.pathname = '/'
             return NextResponse.redirect(url)
