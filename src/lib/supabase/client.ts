@@ -32,7 +32,7 @@ export function createClient() {
     const originalFrom = supabase.from.bind(supabase);
     (supabase as any).from = (table: string) => {
         if (table === 'profiles') {
-            const realQuery = originalFrom(table);
+            const realQuery = originalFrom(table) as any;
             return {
                 select: (columns?: string) => ({
                     eq: (column: string, value: any) => ({
@@ -48,7 +48,7 @@ export function createClient() {
                                     error: null 
                                 };
                             }
-                            return realQuery.select(columns as any).eq(column as any, value).single();
+                            return realQuery.select(columns).eq(column, value).single();
                         }
                     })
                 })
