@@ -12,14 +12,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { X, Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram, Facebook, Activity, Code2, Terminal, Clock, Link as LinkIcon, TrendingUp, Phone, MessageSquare, Users, PenLine, Save, Wand2, Sparkles, Loader2, Star } from "lucide-react";
+import { X, Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram, Facebook, Activity, Code2, Terminal, Clock, Link as LinkIcon, TrendingUp, Phone, MessageSquare, Users, PenLine, Save, Wand2, Sparkles, Loader2, Star, Smartphone, Monitor } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn, normalizeQueryKey } from "@/lib/utils";
-import { insertLead, runLocalSeoAudit, updateLeadManualData, updateLeadStatus } from "@/app/actions/leads";
+import { insertLead, runLocalSeoAudit, updateLeadManualData, updateLeadStatus, fetchAndSavePageSpeed } from "@/app/actions/leads";
 import { generateOutreachSuggestions } from "@/app/actions/ai";
 import { Textarea } from "@/components/ui/textarea";
 import { searchGooglePlaces, getCityAutocomplete, getAllSourcedLeads } from "@/app/actions/search";
@@ -115,7 +115,10 @@ export default function LeadFinder() {
                 if (dbAuditedLeads) setAuditedLeads(dbAuditedLeads);
 
                 // Set default display values if available
-                if (data[0]?.city) setCity(data[0].city);
+                if (data[0]?.city) {
+                    setCity(data[0].city);
+                    setCitySearchTerm(data[0].city);
+                }
                 if (data[0]?.niche) setNiche(data[0].niche);
             }
             setIsLoadingInitial(false);
@@ -141,8 +144,12 @@ export default function LeadFinder() {
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!niche || !city) {
-            toast.error("Please enter both a niche and a city.");
+        if (!niche) {
+            toast.error("Please enter a business niche.");
+            return;
+        }
+        if (!city) {
+            toast.error("Please select a valid city from the suggestions.");
             return;
         }
 
@@ -253,6 +260,44 @@ export default function LeadFinder() {
         if (data) {
             setAuditedLeads(prev => ({ ...prev, [lead.id]: data }));
             toast.success(`Audit complete for ${lead.name}`);
+
+            if (data.companyId && lead.website) {
+                fetchAndSavePageSpeed(data.companyId, lead.website).then(res => {
+                    setAuditedLeads(prev => {
+                        const current = prev[lead.id];
+                        if (!current) return prev;
+                        const newAudit = {
+                            ...current,
+                            rawScrape: {
+                                ...current.rawScrape,
+                                seoAudit: {
+                                    ...current.rawScrape?.seoAudit,
+                                    pagespeed_mobile: res?.success ? res.pagespeed_mobile : null,
+                                    pagespeed_desktop: res?.success ? res.pagespeed_desktop : null
+                                }
+                            }
+                        };
+                        return { ...prev, [lead.id]: newAudit };
+                    });
+                }).catch(() => {
+                    setAuditedLeads(prev => {
+                        const current = prev[lead.id];
+                        if (!current) return prev;
+                        const newAudit = {
+                            ...current,
+                            rawScrape: {
+                                ...current.rawScrape,
+                                seoAudit: {
+                                    ...current.rawScrape?.seoAudit,
+                                    pagespeed_mobile: null,
+                                    pagespeed_desktop: null
+                                }
+                            }
+                        };
+                        return { ...prev, [lead.id]: newAudit };
+                    });
+                });
+            }
         } else {
             toast.error(`Audit failed: ${error}`);
         }
@@ -285,6 +330,44 @@ export default function LeadFinder() {
             setIsAuditing(prev => ({ ...prev, [lead.id]: false }));
             if (data) {
                 setAuditedLeads(prev => ({ ...prev, [lead.id]: data }));
+
+                if (data.companyId && lead.website) {
+                    fetchAndSavePageSpeed(data.companyId, lead.website).then(res => {
+                        setAuditedLeads(prev => {
+                            const current = prev[lead.id];
+                            if (!current) return prev;
+                            const newAudit = {
+                                ...current,
+                                rawScrape: {
+                                    ...current.rawScrape,
+                                    seoAudit: {
+                                        ...current.rawScrape?.seoAudit,
+                                        pagespeed_mobile: res?.success ? res.pagespeed_mobile : null,
+                                        pagespeed_desktop: res?.success ? res.pagespeed_desktop : null
+                                    }
+                                }
+                            };
+                            return { ...prev, [lead.id]: newAudit };
+                        });
+                    }).catch(() => {
+                        setAuditedLeads(prev => {
+                            const current = prev[lead.id];
+                            if (!current) return prev;
+                            const newAudit = {
+                                ...current,
+                                rawScrape: {
+                                    ...current.rawScrape,
+                                    seoAudit: {
+                                        ...current.rawScrape?.seoAudit,
+                                        pagespeed_mobile: null,
+                                        pagespeed_desktop: null
+                                    }
+                                }
+                            };
+                            return { ...prev, [lead.id]: newAudit };
+                        });
+                    });
+                }
             }
         }
         toast.success("Bulk audit complete!");
@@ -412,11 +495,12 @@ export default function LeadFinder() {
                         <div className="grid gap-2 w-full lg:flex-1 min-w-0">
                             <Label htmlFor="niche" className="font-bold text-[10px] uppercase tracking-widest text-zinc-500">Business Niche</Label>
                             <div className="relative w-full">
-                                <Building2 className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
                                 <Input
                                     id="niche"
+                                    name="niche"
                                     placeholder="e.g. Plumber, Roofing, Dentist"
-                                    className="pl-10 h-12 bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 w-full focus-visible:ring-brand/40 autofill:shadow-[0_0_0_30px_#09090b_inset] [selection:color:white] autofill:[-webkit-text-fill-color:white] autofill:text-zinc-100 transition-all"
+                                    className="pl-10 h-12 bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 w-full focus-visible:ring-brand/40 selection:bg-brand/30 selection:text-white autofill:shadow-[0_0_0_30px_#09090b_inset] autofill:[-webkit-text-fill-color:white] transition-all"
                                     value={niche}
                                     onChange={(e) => setNiche(e.target.value)}
                                 />
@@ -425,14 +509,17 @@ export default function LeadFinder() {
                         <div className="grid gap-2 w-full lg:flex-1 min-w-0 relative">
                             <Label htmlFor="city" className="font-bold text-[10px] uppercase tracking-widest text-zinc-500">Target City</Label>
                             <div className="relative w-full">
-                                <MapPin className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500 z-10" />
+                                <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 z-10 pointer-events-none" />
                                 <Input
                                     id="city"
+                                    name="city"
                                     placeholder="e.g. Seattle, Toronto..."
-                                    className="pl-10 h-12 bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 w-full focus-visible:ring-brand/40 autofill:shadow-[0_0_0_30px_#09090b_inset] [selection:color:white] autofill:[-webkit-text-fill-color:white] autofill:text-zinc-100 transition-all"
+                                    className="pl-10 h-12 bg-zinc-950 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 w-full focus-visible:ring-brand/40 selection:bg-brand/30 selection:text-white autofill:shadow-[0_0_0_30px_#09090b_inset] autofill:[-webkit-text-fill-color:white] transition-all"
                                     value={citySearchTerm}
                                     onChange={(e) => {
                                         const val = e.target.value;
+                                        setCitySearchTerm(val);
+                                        setCity(""); // Reset valid city selection on manual type
                                         handleCitySearch(val);
                                         if (val.length >= 2) {
                                             setIsCityDropdownOpen(true);
@@ -741,6 +828,12 @@ export default function LeadFinder() {
                                             <div className="flex flex-wrap items-center text-zinc-500 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest gap-x-4 sm:gap-x-6 gap-y-2 sm:gap-y-3 mt-2 sm:mt-4">
                                                 <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-brand" /> {drawerLead.city}</span>
                                                 {drawerLead.niche && <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-brand" />{drawerLead.niche}</span>}
+                                                {drawerLead.website && (
+                                                    <a href={drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-zinc-400 hover:text-brand transition-colors cursor-pointer group">
+                                                        <Globe className="h-3.5 w-3.5 text-brand group-hover:scale-110 transition-transform" />
+                                                        <span className="border-b border-transparent group-hover:border-brand/50 lowercase tracking-normal">{drawerLead.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</span>
+                                                    </a>
+                                                )}
                                                 <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 sm:border-l border-zinc-800 sm:pl-8 sm:ml-2">
                                                     <div className="flex items-baseline gap-2 py-1 group/rating">
                                                         <Star className="h-4 w-4 text-brand fill-brand shrink-0" />
@@ -1234,6 +1327,56 @@ export default function LeadFinder() {
                                                                 ) : (
                                                                     <span className="text-xs text-zinc-600 italic">None detected</span>
                                                                 )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* PageSpeed Performance */}
+                                                        <div className="col-span-1 md:col-span-2 bg-zinc-900/60 backdrop-blur-md flex flex-col rounded-2xl border border-zinc-800 shadow-xl p-5 hover:border-brand/30 transition-all relative overflow-hidden group mt-2">
+                                                            <div className="absolute top-0 right-0 w-24 h-24 bg-brand/5 rounded-bl-[100px] -mr-4 -mt-4 transition-transform duration-500 group-hover:scale-[1.3]"></div>
+                                                            <div className="flex items-center justify-between mb-4 relative z-10 w-full">
+                                                                <h3 className="font-bold text-zinc-100 flex items-center gap-2 uppercase tracking-tighter text-sm"><Activity className="h-4 w-4 text-brand" /> Core Web Vitals (PageSpeed)</h3>
+                                                                {audit?.rawScrape?.seoAudit?.pagespeed_mobile === undefined && (
+                                                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-950 border border-zinc-800/80 shadow-inner">
+                                                                        <Loader2 className="h-3 w-3 text-brand animate-spin" />
+                                                                        <span className="text-[9px] uppercase tracking-widest font-black text-zinc-500">Fetching</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10 w-full">
+                                                                {/* Mobile */}
+                                                                <div className="flex items-center justify-between bg-zinc-950/40 px-4 py-3 rounded-xl border border-zinc-800/50 shadow-inner hover:border-brand/30 transition-colors">
+                                                                    <span className="font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Smartphone className="h-4 w-4 text-brand" /> Mobile Score</span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {audit?.rawScrape?.seoAudit?.pagespeed_mobile !== undefined ? (
+                                                                            audit.rawScrape.seoAudit.pagespeed_mobile !== null ? (
+                                                                                <span className={cn("text-xl font-black italic", audit.rawScrape.seoAudit.pagespeed_mobile >= 90 ? "text-emerald-500" : audit.rawScrape.seoAudit.pagespeed_mobile >= 50 ? "text-amber-500" : "text-rose-500")}>
+                                                                                    {audit.rawScrape.seoAudit.pagespeed_mobile}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-xs text-zinc-600 font-bold uppercase">N/A</span>
+                                                                            )
+                                                                        ) : (
+                                                                            <div className="h-5 w-8 bg-zinc-800 animate-pulse rounded"></div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                {/* Desktop */}
+                                                                <div className="flex items-center justify-between bg-zinc-950/40 px-4 py-3 rounded-xl border border-zinc-800/50 shadow-inner hover:border-brand/30 transition-colors">
+                                                                    <span className="font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Monitor className="h-4 w-4 text-brand" /> Desktop Score</span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {audit?.rawScrape?.seoAudit?.pagespeed_desktop !== undefined ? (
+                                                                            audit.rawScrape.seoAudit.pagespeed_desktop !== null ? (
+                                                                                <span className={cn("text-xl font-black italic", audit.rawScrape.seoAudit.pagespeed_desktop >= 90 ? "text-emerald-500" : audit.rawScrape.seoAudit.pagespeed_desktop >= 50 ? "text-amber-500" : "text-rose-500")}>
+                                                                                    {audit.rawScrape.seoAudit.pagespeed_desktop}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-xs text-zinc-600 font-bold uppercase">N/A</span>
+                                                                            )
+                                                                        ) : (
+                                                                            <div className="h-5 w-8 bg-zinc-800 animate-pulse rounded"></div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>

@@ -476,3 +476,42 @@ export async function updateLeadStatus(companyId: string, status: string) {
     revalidatePath('/pipeline')
     return { success: true }
 }
+
+export async function fetchAndSavePageSpeed(companyId: string, website: string) {
+    if (!website) return { error: "No website provided" };
+    let urlToScrape = website;
+    if (!urlToScrape.startsWith('http')) {
+        urlToScrape = `https://${urlToScrape}`;
+    }
+
+    try {
+        const [mobileRes, desktopRes] = await Promise.all([
+            fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(urlToScrape)}&strategy=mobile`),
+            fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(urlToScrape)}&strategy=desktop`)
+        ]);
+
+        const mobileData = await mobileRes.json();
+        const desktopData = await desktopRes.json();
+
+        const mobileScoreRaw = mobileData?.lighthouseResult?.categories?.performance?.score;
+        const desktopScoreRaw = desktopData?.lighthouseResult?.categories?.performance?.score;
+
+        const pagespeed_mobile = mobileScoreRaw !== undefined ? Math.round(mobileScoreRaw * 100) : null;
+        const pagespeed_desktop = desktopScoreRaw !== undefined ? Math.round(desktopScoreRaw * 100) : null;
+
+        const supabase = await createClient();
+        const { error } = await supabase
+            .from('seo_audits')
+            .update({ pagespeed_mobile, pagespeed_desktop })
+            .eq('company_id', companyId);
+
+        if (error) throw new Error(error.message);
+
+        revalidatePath('/lead-finder');
+        revalidatePath('/pipeline');
+        
+        return { success: true, pagespeed_mobile, pagespeed_desktop };
+    } catch (error: any) {
+        return { error: error.message || 'Failed to fetch PageSpeed' };
+    }
+}

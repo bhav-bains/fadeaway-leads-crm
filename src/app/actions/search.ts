@@ -25,7 +25,7 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
             ig_activity,
             rating_count,
             scores!left (score_overall, score_contactability, score_seo, score_local_intent, score_fit),
-            seo_audits!left (has_title, title_len, has_h1, has_booking_link, schema_org_types, top_keywords_found),
+            seo_audits!left (has_title, title_len, has_h1, has_booking_link, schema_org_types, top_keywords_found, pagespeed_mobile, pagespeed_desktop),
             contacts!left (email, type),
             socials!left (platform, url)
         `)
@@ -88,6 +88,8 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
                                 has_h1: audit?.has_h1 || false,
                                 has_booking_link: audit?.has_booking_link || false,
                                 has_schema: (audit?.schema_org_types?.length || 0) > 0,
+                                pagespeed_mobile: audit?.pagespeed_mobile ?? null,
+                                pagespeed_desktop: audit?.pagespeed_desktop ?? null,
                             },
                             enrichment: {
                                 contacts: {
