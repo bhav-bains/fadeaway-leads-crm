@@ -26,6 +26,25 @@ import { searchGooglePlaces, getCityAutocomplete, getAllSourcedLeads } from "@/a
 import { useEffect, Fragment } from "react";
 import type { EnrichmentData, ScoreBreakdown, ScoringRule } from "@/lib/scraper";
 
+const STATIC_TEMPLATES: Record<string, any[]> = {
+    bhav: [
+        {
+            name: "The Hooper SEO Pitch",
+            subject: "[business_name] / local search & site friction",
+            emailBody: "Hi Coach [Name],\n\nYou guys run an elite program on the court, but your website's current setup is actively leaking registrations to other local academies.\n\nRight now, when parents search for hoops programs on their phones, they are hitting a painfully slow mobile site and a confusing registration menu. Google’s algorithm heavily penalizes that kind of mobile friction—which buries your local SEO ranking and forces frustrated parents to bounce to a competitor before they even step foot in your gym.\n\nI’m a massive hoops fan, but my court is Google. I run a technical SEO and web agency strictly for elite basketball programs because I hate seeing top-tier talent lose revenue to bad tech. I actually took the liberty of mocking up a high-speed, 2-click funnel that fixes your UX and is built to dominate local search.\n\nMind if I send the live demo over? No pressure.\n\nBest,\nBhav Bains\nFounder, Fadeaway Creatives",
+            dmBody: "Hey Coach! Ran a quick audit on your site—noticed some technical friction that's likely costing you mobile sign-ups. I actually mocked up a high-speed funnel fix for you. Mind if I send the link over?"
+        }
+    ],
+    neha: [
+        {
+            name: "The Wellness Booking Pitch",
+            subject: "[business_name] / mobile booking friction",
+            emailBody: "Hi [Name],\n\nYou’ve built an incredible space and community, but your website’s current setup is actively leaking bookings to other local spots.\n\nRight now, when people search for wellness services on their phones, they are hitting a painfully slow mobile site and a clunky booking menu. Google’s algorithm heavily penalizes that kind of mobile friction - which buries your local SEO ranking and forces frustrated clients to bounce to a competitor before they ever walk through your doors.\n\nI’m a massive advocate for local wellness, but my practice is digital growth. I run a technical SEO and web agency strictly for wellness clinics and boutique studios because I hate seeing great practitioners lose revenue to bad tech. My team actually took the liberty of mocking up a high-speed, 2-click booking funnel that fixes your UX and is built to dominate local search.\n\nMind if I send the live demo over? No pressure.\n\nBest,\n\nNeha\nRelationship Manager, Fadeaway Creatives",
+            dmBody: "Hi! I just ran a technical audit on [business_name] and noticed some significant mobile booking friction that's likely costing you clients. I actually mocked up a high-speed funnel fix for you—would you like to see it?"
+        }
+    ]
+};
+
 export default function LeadFinder() {
     const [niche, setNiche] = useState("");
     const [city, setCity] = useState("");
@@ -71,6 +90,8 @@ export default function LeadFinder() {
     const [aiSuggestions, setAiSuggestions] = useState<any>(null);
     const [isSendingEmail, setIsSendingEmail] = useState(false);
     const [activeReachoutTab, setActiveReachoutTab] = useState('email');
+    const [activeTemplateId, setActiveTemplateId] = useState('bhav');
+    const [outreachMethod, setOutreachMethod] = useState<'ai' | 'static'>('ai');
 
     // Collapsible Groups State
     const [toggledGroups, setToggledGroups] = useState<Record<string, boolean>>({});
@@ -454,7 +475,7 @@ export default function LeadFinder() {
                 <h1 className="text-4xl sm:text-5xl font-black tracking-tighter uppercase font-heading">
                     PIPELINE SOURCING<span className="text-brand">.</span>
                 </h1>
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-brand/80 flex items-center gap-3">
+                <p className="text-xs font-bold uppercase tracking-[0.3em] text-brand/80 flex items-center gap-3">
                     <span className="h-[1px] w-4 bg-brand/50"></span>
                     ACCOUNT DISCOVERY & QUALIFICATION
                 </p>
@@ -464,7 +485,7 @@ export default function LeadFinder() {
                 <CardContent className="p-0 overflow-visible">
                     <form onSubmit={handleSearch} className="flex flex-col lg:flex-row gap-5 sm:gap-8 items-start lg:items-end w-full min-w-0 overflow-visible">
                         <div className="grid gap-2 w-full lg:flex-1 min-w-0">
-                            <Label htmlFor="niche" className="font-bold text-[11px] uppercase tracking-widest text-zinc-400">Business Niche</Label>
+                            <Label htmlFor="niche" className="font-bold text-sm uppercase tracking-widest text-zinc-400">Business Niche</Label>
                             <div className="relative w-full">
                                 <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 pointer-events-none" />
                                 <Input
@@ -478,7 +499,7 @@ export default function LeadFinder() {
                             </div>
                         </div>
                         <div className="grid gap-2 w-full lg:flex-1 min-w-0 relative">
-                            <Label htmlFor="city" className="font-bold text-[11px] uppercase tracking-widest text-zinc-400">Target City</Label>
+                            <Label htmlFor="city" className="font-bold text-sm uppercase tracking-widest text-zinc-400">Target City</Label>
                             <div className="relative w-full">
                                 <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 z-10 pointer-events-none" />
                                 <Input
@@ -552,7 +573,7 @@ export default function LeadFinder() {
                         <Button
                             type="submit"
                             disabled={isSearching || isLoadingInitial}
-                            className="w-full lg:w-auto font-black uppercase tracking-[0.15em] text-[11px] px-10 shrink-0 bg-brand hover:bg-brand/90 text-zinc-950 h-12 transition-all active:scale-[0.98] shadow-[0_0_20px_rgba(255,102,0,0.15)] hover:shadow-[0_0_30px_rgba(255,102,0,0.25)]"
+                            className="w-full lg:w-auto font-black uppercase tracking-[0.15em] text-sm px-10 shrink-0 bg-brand hover:bg-brand/90 text-zinc-950 h-12 transition-all active:scale-[0.98] shadow-[0_0_20px_rgba(255,102,0,0.15)] hover:shadow-[0_0_30px_rgba(255,102,0,0.25)]"
                         >
                             {isSearching ? (
                                 <Fragment>
@@ -632,10 +653,10 @@ export default function LeadFinder() {
                                                     {expanded ? <ChevronDown className="h-4 w-4 text-brand" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
                                                 </div>
                                                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                                                    <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-100 group-hover/header:text-brand transition-colors leading-[1.6] sm:leading-none break-words">
+                                                    <h4 className="text-sm font-black uppercase tracking-[0.2em] text-zinc-100 group-hover/header:text-brand transition-colors leading-[1.6] sm:leading-none break-words">
                                                         {groupName}
                                                     </h4>
-                                                    <Badge variant="outline" className="shrink-0 w-fit bg-zinc-950/50 border-zinc-800 text-[10px] font-black tracking-widest px-3 h-6 rounded-full flex items-center gap-1.5 shadow-none transition-colors group-hover/header:border-zinc-700">
+                                                    <Badge variant="outline" className="shrink-0 w-fit bg-zinc-950/50 border-zinc-800 text-xs font-black tracking-widest px-3 h-6 rounded-full flex items-center gap-1.5 shadow-none transition-colors group-hover/header:border-zinc-700">
                                                         <span className="text-zinc-300">{groupLeads.length} LEADS</span>
                                                         <span className="text-zinc-700">|</span>
                                                         <span className={groupAuditedCount > 0 ? "text-brand shadow-[0_0_10px_rgba(255,102,0,0.15)]" : "text-zinc-500"}>
@@ -681,10 +702,10 @@ export default function LeadFinder() {
                                                                                 </div>
                                                                                 <div className="w-[1px] h-3.5 bg-zinc-800"></div>
                                                                                 <div className="flex flex-col leading-none">
-                                                                                    <span className="text-[11px] font-black text-brand tracking-tight">
+                                                                                    <span className="text-sm font-black text-brand tracking-tight">
                                                                                         {result.ratingCount || 0}
                                                                                     </span>
-                                                                                    <span className="text-[7px] font-bold text-zinc-500 uppercase tracking-widest">
+                                                                                    <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
                                                                                         Reviews
                                                                                     </span>
                                                                                 </div>
@@ -715,14 +736,14 @@ export default function LeadFinder() {
                                                                                     <span className="text-[12px] font-bold text-zinc-500 leading-[1.2]">/{auditData.max_score === 100 || auditData.rawScrape?.seoAudit?.pagespeed_mobile !== null ? 100 : 85}</span>
                                                                                 </div>
                                                                             </div>
-                                                                            <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-brand transition-colors flex items-center gap-1.5">
+                                                                            <span className="text-sm font-bold text-zinc-500 uppercase tracking-widest group-hover:text-brand transition-colors flex items-center gap-1.5">
                                                                                 Send Outreach
                                                                                 <ChevronRight className="h-3.5 w-3.5 -mr-1" />
                                                                             </span>
                                                                         </div>
                                                                     ) : (
                                                                         <div className="mt-auto pt-4 flex items-center justify-center border-t border-zinc-800/50">
-                                                                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-brand/80 transition-colors pt-3 flex items-center gap-2">
+                                                                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest group-hover:text-brand/80 transition-colors pt-3 flex items-center gap-2">
                                                                                 <Sparkles className="h-3 w-3" />
                                                                                 Click to Audit
                                                                             </span>
@@ -756,7 +777,7 @@ export default function LeadFinder() {
                                                                         {isLoading ? 'Fetching Leads...' : 'Dig Deeper: Load 20 More Leads'}
                                                                     </span>
                                                                 </Button>
-                                                                <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-zinc-700">More undiscovered successful businesses found</p>
+                                                                <p className="text-xs uppercase font-bold tracking-[0.2em] text-zinc-700">More undiscovered successful businesses found</p>
                                                             </div>
                                                         );
                                                     }
@@ -803,7 +824,7 @@ export default function LeadFinder() {
                                         <div className="relative z-10 flex flex-col gap-2">
                                             <div className="flex items-center gap-2 sm:gap-3">
                                                 <span className="h-[1px] w-4 bg-brand/50"></span>
-                                                <span className="text-[11px] sm:text-[12px] font-black uppercase tracking-[0.3em] text-brand/80">Business Intelligence</span>
+                                                <span className="text-sm sm:text-[12px] font-black uppercase tracking-[0.3em] text-brand/80">Business Intelligence</span>
                                             </div>
                                             <h2 className="text-2xl sm:text-3xl font-heading uppercase leading-tight pr-10">{drawerLead.name}</h2>
                                             <div className="flex items-center text-zinc-400 text-[10.5px] sm:text-[11.5px] font-bold uppercase tracking-wider gap-x-2 sm:gap-x-4 mt-2 sm:mt-3 whitespace-nowrap">
@@ -819,13 +840,13 @@ export default function LeadFinder() {
                                                     <div className="flex items-baseline gap-2 py-1 group/rating">
                                                         <Star className="h-4 w-4 text-brand fill-brand shrink-0" />
                                                         <span className="text-xl sm:text-2xl font-black text-brand italic tracking-tighter leading-none">{drawerLead.rating}</span>
-                                                        <span className="text-[11px] sm:text-[12px] text-zinc-500 font-bold uppercase tracking-widest leading-none">({drawerLead.ratingCount} reviews)</span>
+                                                        <span className="text-sm sm:text-[12px] text-zinc-500 font-bold uppercase tracking-widest leading-none">({drawerLead.ratingCount} reviews)</span>
                                                     </div>
 
                                                     <div className="flex items-center gap-3 py-1 sm:ml-2 border-l border-zinc-800/50 pl-4 sm:pl-8 group/score">
                                                         <Activity className="h-5 w-5 text-emerald-400 shrink-0" />
                                                         <div className="flex items-baseline gap-2">
-                                                            <span className="text-[10px] sm:text-[11px] font-black text-zinc-500 uppercase tracking-[0.2em] leading-none">SCORE:</span>
+                                                            <span className="text-xs sm:text-sm font-black text-zinc-500 uppercase tracking-[0.2em] leading-none">SCORE:</span>
                                                             <span className="text-xl sm:text-2xl font-black text-white italic tracking-tighter leading-none">
                                                                 {audit?.rawScrape?.scoreBreakdown ? audit.rawScrape.scoreBreakdown.total : audit?.score}/{audit?.rawScrape?.scoreBreakdown?.maxTotal || audit?.max_score || (audit?.rawScrape?.seoAudit?.pagespeed_mobile !== null ? 100 : 85)}
                                                             </span>
@@ -854,7 +875,7 @@ export default function LeadFinder() {
                                             <TabsTrigger value="outreach" className="px-8 py-2 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
                                                 <div className="flex items-center gap-3">
                                                     <Send className="h-4 w-4" />
-                                                    <span className="text-[12px] font-black uppercase tracking-[0.15em]">AI Outreach</span>
+                                                    <span className="text-[12px] font-black uppercase tracking-[0.15em]">Outreach</span>
                                                 </div>
                                             </TabsTrigger>
                                         </TabsList>
@@ -873,19 +894,19 @@ export default function LeadFinder() {
                                                     </div>
                                                     <div className="text-center space-y-2">
                                                         <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Deep Intel Required</p>
-                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 max-w-[240px] leading-relaxed mx-auto">
-                                                            Run a 1-click SEO AI Audit to uncover technical gaps, hidden contacts, and pixel data.
+                                                        <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 max-w-[240px] leading-relaxed mx-auto">
+                                                            Run a 1-click SEO Audit to uncover technical gaps, hidden contacts, and pixel data.
                                                         </p>
                                                     </div>
                                                     <Button
                                                         onClick={() => handleRunAudit(drawerLead)}
                                                         disabled={isAuditing[drawerLead.id]}
-                                                        className="bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 hover:border-brand/40 font-black uppercase tracking-widest text-[10px] h-11 px-8 rounded-xl shadow-sm active:scale-95 transition-all"
+                                                        className="bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 hover:border-brand/40 font-black uppercase tracking-widest text-xs h-11 px-8 rounded-xl shadow-sm active:scale-95 transition-all"
                                                     >
                                                         {isAuditing[drawerLead.id] ? (
                                                             <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> Deep Auditing...</>
                                                         ) : (
-                                                            <><Terminal className="h-3.5 w-3.5 mr-2" /> Run AI Site Audit</>
+                                                            <><Terminal className="h-3.5 w-3.5 mr-2" /> Run Site Audit</>
                                                         )}
                                                     </Button>
                                                 </div>
@@ -915,7 +936,7 @@ export default function LeadFinder() {
                                                                 <a href={drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-zinc-900/40 border border-zinc-700/50 hover:bg-zinc-800/80 hover:shadow-xl hover:border-brand/40 transition-all group/link">
                                                                     <div className="bg-zinc-900 p-2 rounded-lg shadow-sm border border-zinc-800 group-hover/link:bg-zinc-800 transition-colors"><Globe className="h-4 w-4 text-brand group-hover/link:scale-110 transition-transform" /></div>
                                                                     <div className="min-w-0 flex-1">
-                                                                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">Website</p>
+                                                                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">Website</p>
                                                                         <p className="text-[13px] sm:text-sm font-semibold text-zinc-100 truncate">{drawerLead.website}</p>
                                                                     </div>
                                                                 </a>
@@ -927,7 +948,7 @@ export default function LeadFinder() {
                                                                 <div className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-zinc-900/40 border border-zinc-700/50 group/link hover:bg-zinc-800/80 hover:shadow-xl hover:border-brand/40 transition-all">
                                                                     <div className="bg-zinc-900 p-2 rounded-lg shadow-sm border border-zinc-800 group-hover/link:bg-zinc-800 transition-colors"><Mail className="h-4 w-4 text-brand group-hover/link:scale-110 transition-transform" /></div>
                                                                     <div className="min-w-0 flex-1">
-                                                                        <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">Email Match</p>
+                                                                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">Email Match</p>
                                                                         <p className="text-[13px] sm:text-sm font-semibold text-zinc-100 truncate" title={enrichment.contacts.emails[0].email}>{enrichment.contacts.emails[0].email}</p>
                                                                     </div>
                                                                 </div>
@@ -938,14 +959,14 @@ export default function LeadFinder() {
                                                             <div className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-zinc-900/40 border border-zinc-700/50 group/link hover:bg-zinc-800/80 hover:shadow-xl hover:border-brand/40 transition-all">
                                                                 <div className="bg-zinc-900 p-2 text-brand rounded-lg shadow-sm border border-zinc-800 group-hover/link:bg-zinc-800 transition-colors flex justify-center items-center"><Phone className="h-4 w-4 group-hover/link:scale-110 transition-transform" /></div>
                                                                 <div className="min-w-0 flex-1">
-                                                                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">Phone Match</p>
+                                                                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">Phone Match</p>
                                                                     <p className="text-[13px] sm:text-sm font-semibold text-zinc-100 truncate">{drawerLead.phone || (enrichment.contacts.hasPhone ? 'Linked on site' : 'Not found')}</p>
                                                                 </div>
                                                             </div>
 
                                                             <div className="flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl bg-zinc-900/40 border border-zinc-700/50">
                                                                 <div className="min-w-0 w-full">
-                                                                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1.5 ml-1">Instagram Find</p>
+                                                                    <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1.5 ml-1">Instagram Find</p>
                                                                     <div className="flex items-center gap-2">
                                                                         {drawerLead?.instagram_url || enrichment?.socials?.instagram ? (() => {
                                                                             const rawUrl = drawerLead.instagram_url || enrichment?.socials?.instagram?.url;
@@ -965,7 +986,7 @@ export default function LeadFinder() {
                                                                             return (
                                                                                 <a href={finalUrl} target="_blank" rel="noreferrer" className="bg-zinc-900 p-1.5 rounded-lg shadow-sm border border-zinc-800 hover:scale-105 transition-all hover:border-brand/40 group/soc flex items-center gap-2 px-3 flex-1 min-w-0">
                                                                                     <Instagram className="h-4 w-4 text-brand/80 group-hover/soc:text-brand shrink-0" />
-                                                                                    <span className="text-[10px] font-black text-zinc-100 uppercase tracking-widest truncate">{handle}</span>
+                                                                                    <span className="text-xs font-black text-zinc-100 uppercase tracking-widest truncate">{handle}</span>
                                                                                 </a>
                                                                             );
                                                                         })() : (
@@ -983,13 +1004,13 @@ export default function LeadFinder() {
                                                         <div className="flex items-center gap-2 mb-5 relative z-10">
                                                             <div className="h-8 w-8 rounded-full bg-zinc-950 flex items-center justify-center border border-zinc-800"><PenLine className="h-4 w-4 text-brand" /></div>
                                                             <h3 className="font-bold text-zinc-100 text-base uppercase tracking-tighter">Manual Intelligence</h3>
-                                                            <Badge variant="outline" className="ml-auto text-[9px] uppercase tracking-widest font-black text-brand border-brand/20 bg-brand/5">Audit Notes</Badge>
+                                                            <Badge variant="outline" className="ml-auto text-sm uppercase tracking-widest font-black text-brand border-brand/20 bg-brand/5">Audit Notes</Badge>
                                                         </div>
 
                                                         <div className="space-y-4 relative z-10">
                                                             {/* Notes */}
                                                             <div>
-                                                                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><MessageSquare className="h-3 w-3 text-brand" /> Audit Comments</label>
+                                                                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><MessageSquare className="h-3 w-3 text-brand" /> Audit Comments</label>
                                                                 <Textarea
                                                                     placeholder="Add your manual audit notes here..."
                                                                     className="min-h-[100px] text-sm bg-zinc-900/40 border-zinc-700/50 text-zinc-100 focus:border-brand/50 focus:ring-brand/20 rounded-xl resize-none shadow-inner"
@@ -1001,7 +1022,7 @@ export default function LeadFinder() {
                                                             {/* IG Metrics */}
                                                             <div className="grid grid-cols-2 gap-4">
                                                                 <div className="space-y-1.5">
-                                                                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Instagram className="h-3 w-3 text-brand" /> IG Followers</label>
+                                                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Instagram className="h-3 w-3 text-brand" /> IG Followers</label>
                                                                     <Input
                                                                         type="number"
                                                                         placeholder="e.g. 5200"
@@ -1011,7 +1032,7 @@ export default function LeadFinder() {
                                                                     />
                                                                 </div>
                                                                 <div className="space-y-1.5">
-                                                                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Users className="h-3 w-3 text-brand" /> Activity</label>
+                                                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Users className="h-3 w-3 text-brand" /> Activity</label>
                                                                     <Select value={igActivity} onValueChange={(val) => setIgActivity(val || '')}>
                                                                         <SelectTrigger className="h-11 text-sm bg-zinc-900/40 border-zinc-700/50 text-zinc-100 rounded-xl focus:border-brand/50 focus:ring-brand/20">
                                                                             <SelectValue placeholder="Select..." />
@@ -1029,7 +1050,7 @@ export default function LeadFinder() {
                                                             {/* Manual Instagram & Win Prob */}
                                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                                 <div>
-                                                                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Instagram className="h-3 w-3 text-brand" /> Instagram Handle/URL</label>
+                                                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Instagram className="h-3 w-3 text-brand" /> Instagram Handle/URL</label>
                                                                     <Input
                                                                         placeholder="e.g. @fadeaway_performance or full URL"
                                                                         className="h-11 text-sm bg-zinc-900/40 border-zinc-700/50 text-zinc-100 rounded-xl focus:border-brand/50 focus:ring-brand/20 shadow-inner"
@@ -1038,7 +1059,7 @@ export default function LeadFinder() {
                                                                     />
                                                                 </div>
                                                                 <div className="space-y-1.5">
-                                                                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Activity className="h-3 w-3 text-brand" /> Win Probability</label>
+                                                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Activity className="h-3 w-3 text-brand" /> Win Probability</label>
                                                                     <Select value={winProbability} onValueChange={(val) => setWinProbability(val || '')}>
                                                                         <SelectTrigger className="h-11 text-sm bg-zinc-900/40 border-zinc-700/50 text-zinc-100 rounded-xl focus:border-brand/50 focus:ring-brand/20">
                                                                             <SelectValue placeholder="Select..." />
@@ -1056,7 +1077,7 @@ export default function LeadFinder() {
                                                             {/* Manual Contact */}
                                                             <div className="grid grid-cols-2 gap-4">
                                                                 <div className="space-y-1.5">
-                                                                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Mail className="h-3 w-3 text-brand" /> Add Email</label>
+                                                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Mail className="h-3 w-3 text-brand" /> Add Email</label>
                                                                     <Input
                                                                         type="email"
                                                                         placeholder="name@company.com"
@@ -1066,7 +1087,7 @@ export default function LeadFinder() {
                                                                     />
                                                                 </div>
                                                                 <div className="space-y-1.5">
-                                                                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Phone className="h-3 w-3 text-brand" /> Add Phone</label>
+                                                                    <label className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Phone className="h-3 w-3 text-brand" /> Add Phone</label>
                                                                     <Input
                                                                         type="tel"
                                                                         placeholder="+1 (555) 000-0000"
@@ -1079,7 +1100,7 @@ export default function LeadFinder() {
 
                                                             {/* Save Button */}
                                                             <Button
-                                                                className="w-full h-12 font-black text-brand bg-brand/5 hover:bg-brand/10 border border-brand/20 hover:border-brand/40 transition-all uppercase tracking-widest text-[11px] rounded-xl shadow-sm"
+                                                                className="w-full h-12 font-black text-brand bg-brand/5 hover:bg-brand/10 border border-brand/20 hover:border-brand/40 transition-all uppercase tracking-widest text-sm rounded-xl shadow-sm"
                                                                 disabled={isSavingManual}
                                                                 onClick={async () => {
                                                                     if (!drawerLead?.auditData?.companyId && !drawerLead?.companyId) {
@@ -1179,19 +1200,19 @@ export default function LeadFinder() {
                                                     </div>
                                                     <div className="text-center space-y-2">
                                                         <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Deep Intel Required</p>
-                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 max-w-[240px] leading-relaxed mx-auto">
-                                                            Run a 1-click SEO AI Audit to uncover technical gaps, hidden contacts, and pixel data.
+                                                        <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 max-w-[240px] leading-relaxed mx-auto">
+                                                            Run a 1-click SEO Audit to uncover technical gaps, hidden contacts, and pixel data.
                                                         </p>
                                                     </div>
                                                     <Button
                                                         onClick={() => handleRunAudit(drawerLead)}
                                                         disabled={isAuditing[drawerLead.id]}
-                                                        className="bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 hover:border-brand/40 font-black uppercase tracking-widest text-[10px] h-11 px-8 rounded-xl shadow-sm active:scale-95 transition-all"
+                                                        className="bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 hover:border-brand/40 font-black uppercase tracking-widest text-xs h-11 px-8 rounded-xl shadow-sm active:scale-95 transition-all"
                                                     >
                                                         {isAuditing[drawerLead.id] ? (
                                                             <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> Deep Auditing...</>
                                                         ) : (
-                                                            <><Terminal className="h-3.5 w-3.5 mr-2" /> Run AI Site Audit</>
+                                                            <><Terminal className="h-3.5 w-3.5 mr-2" /> Run Site Audit</>
                                                         )}
                                                     </Button>
                                                 </div>
@@ -1301,7 +1322,7 @@ export default function LeadFinder() {
                                                                                                         <span className="leading-snug font-bold">{rule.label}</span>
                                                                                                         {rule.points > 0 && (
                                                                                                             <span className={cn(
-                                                                                                                "text-[9px] font-black uppercase tracking-widest",
+                                                                                                                "text-sm font-black uppercase tracking-widest",
                                                                                                                 isSuccess ? "text-emerald-500/80" : "text-rose-500/80"
                                                                                                             )}>
                                                                                                                 +{rule.points} {cat.type === 'decay' ? 'pts penalty' : 'pts reward'}
@@ -1345,7 +1366,7 @@ export default function LeadFinder() {
                                                                     <div className="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800 p-4 flex items-center justify-between group/speed hover:border-zinc-700 transition-colors">
                                                                         <div className="flex items-center gap-3">
                                                                             <Monitor className="h-4 w-4 text-brand" />
-                                                                            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Desktop Speed</span>
+                                                                            <span className="text-xs font-black uppercase tracking-widest text-zinc-500">Desktop Speed</span>
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
                                                                             {isAuditing[drawerLead.id] && (
@@ -1379,29 +1400,29 @@ export default function LeadFinder() {
                                                     </div>
                                                     <div className="text-center space-y-2">
                                                         <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400">Deep Intel Required</p>
-                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 max-w-[240px] leading-relaxed mx-auto">
-                                                            Run an SEO AI Audit in the Business Intel tab before generating outreach.
+                                                        <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 max-w-[240px] leading-relaxed mx-auto">
+                                                            Run an SEO Audit in the Business Intel tab before generating outreach.
                                                         </p>
                                                     </div>
                                                 </div>
                                             ) : isGeneratingAI ? (
                                                 <div className="py-20 flex flex-col items-center justify-center text-center">
                                                     <Loader2 className="h-10 w-10 text-brand animate-spin mb-4" />
-                                                    <h3 className="text-lg text-zinc-100 uppercase font-black">Generating hyper-personalized pitch...</h3>
-                                                    <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-2">Analyzing audit data, manual notes, and finding pain points.</p>
+                                                    <h3 className="text-lg text-zinc-100 uppercase font-black">Generating pitch...</h3>
+                                                    <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-2">Analyzing audit data, manual notes, and finding pain points.</p>
                                                 </div>
                                             ) : aiSuggestions ? (
                                                 <div className="space-y-6 max-w-3xl mx-auto w-full pb-10">
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                         <div className="bg-zinc-900/40 p-4 rounded-xl border border-zinc-800 shadow-inner">
-                                                            <h4 className="font-black text-brand text-[10px] mb-3 flex items-center gap-1.5 uppercase tracking-widest"><Search className="h-4 w-4" /> Key Findings</h4>
-                                                            <ul className="text-[11px] text-zinc-400 space-y-2 list-disc pl-4 font-medium">
+                                                            <h4 className="font-black text-brand text-xs mb-3 flex items-center gap-1.5 uppercase tracking-widest"><Search className="h-4 w-4" /> Key Findings</h4>
+                                                            <ul className="text-sm text-zinc-400 space-y-2 list-disc pl-4 font-medium">
                                                                 {aiSuggestions.keyFindings?.map((f: string, i: number) => <li key={i}>{f}</li>)}
                                                             </ul>
                                                         </div>
                                                         <div className="bg-zinc-900/40 p-4 rounded-xl border border-zinc-800 shadow-inner">
-                                                            <h4 className="font-black text-rose-500 text-[10px] mb-3 flex items-center gap-1.5 uppercase tracking-widest"><AlertCircle className="h-4 w-4" /> Pain Points</h4>
-                                                            <ul className="text-[11px] text-zinc-400 space-y-2 list-disc pl-4 font-medium">
+                                                            <h4 className="font-black text-rose-500 text-xs mb-3 flex items-center gap-1.5 uppercase tracking-widest"><AlertCircle className="h-4 w-4" /> Pain Points</h4>
+                                                            <ul className="text-sm text-zinc-400 space-y-2 list-disc pl-4 font-medium">
                                                                 {aiSuggestions.painPoints?.map((p: string, i: number) => <li key={i}>{p}</li>)}
                                                             </ul>
                                                         </div>
@@ -1409,17 +1430,17 @@ export default function LeadFinder() {
 
                                                     <Tabs defaultValue="email" className="w-full" onValueChange={setActiveReachoutTab}>
                                                         <TabsList className="grid grid-cols-2 mb-6 bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
-                                                            <TabsTrigger value="email" className="rounded-lg text-zinc-500 hover:text-zinc-300 font-black text-[11px] uppercase tracking-widest data-[state=active]:bg-zinc-800 data-[state=active]:text-brand shadow-none transition-all">
+                                                            <TabsTrigger value="email" className="rounded-lg text-zinc-500 hover:text-zinc-300 font-black text-sm uppercase tracking-widest data-[state=active]:bg-zinc-800 data-[state=active]:text-brand shadow-none transition-all">
                                                                 <Mail className="h-4 w-4 mr-2" /> Email Pitch
                                                             </TabsTrigger>
-                                                            <TabsTrigger value="dm" className="rounded-lg text-zinc-500 hover:text-zinc-300 font-black text-[11px] uppercase tracking-widest data-[state=active]:bg-zinc-800 data-[state=active]:text-brand shadow-none transition-all">
+                                                            <TabsTrigger value="dm" className="rounded-lg text-zinc-500 hover:text-zinc-300 font-black text-sm uppercase tracking-widest data-[state=active]:bg-zinc-800 data-[state=active]:text-brand shadow-none transition-all">
                                                                 <Instagram className="h-4 w-4 mr-2" /> Instagram DM
                                                             </TabsTrigger>
                                                         </TabsList>
 
                                                         <TabsContent value="email" className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                                             <div className="space-y-1.5">
-                                                                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5 block">Subject Line</label>
+                                                                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-1.5 block">Subject Line</label>
                                                                 <Input
                                                                     value={aiSuggestions.subjectLine}
                                                                     onChange={(e) => setAiSuggestions({ ...aiSuggestions, subjectLine: e.target.value })}
@@ -1427,9 +1448,9 @@ export default function LeadFinder() {
                                                                 />
                                                             </div>
                                                             <div className="space-y-1.5">
-                                                                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5 block flex justify-between items-center">
+                                                                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-1.5 block flex justify-between items-center">
                                                                     Email Body
-                                                                    <span className="text-brand text-[9px] font-black tracking-widest">Supports Markdown</span>
+                                                                    <span className="text-brand text-sm font-black tracking-widest">Supports Markdown</span>
                                                                 </label>
                                                                 <Textarea
                                                                     value={aiSuggestions.emailBody}
@@ -1441,9 +1462,9 @@ export default function LeadFinder() {
 
                                                         <TabsContent value="dm" className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                                             <div className="space-y-1.5">
-                                                                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5 block flex justify-between items-center">
+                                                                <label className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-1.5 block flex justify-between items-center">
                                                                     Instagram Direct Message
-                                                                    <span className="text-brand text-[9px] font-black tracking-widest">Punchy & Short</span>
+                                                                    <span className="text-brand text-sm font-black tracking-widest">Punchy & Short</span>
                                                                 </label>
                                                                 <Textarea
                                                                     value={aiSuggestions.dmBody}
@@ -1453,7 +1474,7 @@ export default function LeadFinder() {
                                                             </div>
                                                             <div className="p-4 bg-brand/5 rounded-xl border border-brand/20 flex items-start gap-3 shadow-inner">
                                                                 <div className="bg-brand/10 p-1.5 rounded-lg border border-brand/20"><Activity className="h-4 w-4 text-brand" /></div>
-                                                                <p className="text-[11px] text-zinc-400 leading-relaxed font-medium">
+                                                                <p className="text-sm text-zinc-400 leading-relaxed font-medium">
                                                                     <strong className="text-brand uppercase tracking-widest font-black mr-1">Pro Tip:</strong> DMs work best when sent directly from your mobile app. Copy this suggestion and paste it into Instagram!
                                                                 </p>
                                                             </div>
@@ -1463,166 +1484,184 @@ export default function LeadFinder() {
                                                     {/* Debug Accordion */}
                                                     {aiSuggestions?._debug && (
                                                         <details className="rounded-xl border border-zinc-800 bg-zinc-900/30 overflow-hidden group">
-                                                            <summary className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-300 flex items-center gap-2 transition-colors list-none">
+                                                            <summary className="px-4 py-3 text-xs font-black uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-300 flex items-center gap-2 transition-colors list-none">
                                                                 <span className="text-zinc-600 group-open:text-brand transition-colors">▶</span>
-                                                                🔬 AI Debug — Prompt Sent to Gemini
+                                                                🔬 Debug — Prompt Sent to Gemini
                                                             </summary>
                                                             <div className="border-t border-zinc-800 p-4">
-                                                                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">📝 Full Prompt Sent to Gemini</p>
-                                                                <pre className="text-[11px] text-zinc-300 whitespace-pre-wrap leading-relaxed font-mono bg-zinc-950 rounded-lg p-3 overflow-x-auto max-h-[400px] overflow-y-auto">{aiSuggestions._debug.prompt}</pre>
+                                                                <p className="text-sm font-black uppercase tracking-widest text-zinc-500 mb-2">📝 Full Prompt Sent to Gemini</p>
+                                                                <pre className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed font-mono bg-zinc-950 rounded-lg p-3 overflow-x-auto max-h-[400px] overflow-y-auto">{aiSuggestions._debug.prompt}</pre>
                                                             </div>
                                                         </details>
                                                     )}
                                                 </div>
                                             ) : (
-                                                <div className="flex flex-col p-4 gap-4">
-                                                    {/* Data Preview Panel */}
-                                                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-                                                        <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900">
-                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">📊 Data Being Sent to AI</span>
-                                                        </div>
-                                                        {/* Business Identity Row */}
-                                                        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/40 flex flex-col gap-0.5">
-                                                            <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Business</p>
-                                                            <p className="text-[13px] font-black text-zinc-100">{drawerLead.name}</p>
-                                                            <p className="text-[10px] text-zinc-500 font-bold">{drawerLead.niche || 'Local Business'} &bull; <span className="text-brand/80">{drawerLead.website || 'No website'}</span></p>
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-0 divide-x divide-zinc-800">
-                                                            {/* Left column */}
-                                                            <div className="flex flex-col gap-0 divide-y divide-zinc-800/60">
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Overall Score</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.score ?? '—'}<span className="text-zinc-500 text-[10px]">/{audit?.max_score || 85}</span></p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">UX Decay & Tech</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.rawScrape?.scoreBreakdown?.uxDecayTechnical ?? '—'}<span className="text-zinc-500 text-[10px]">/{audit?.rawScrape?.scoreBreakdown?.uxMax || 30}</span></p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Maturity & Cash</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.rawScrape?.scoreBreakdown?.cashFlowMaturity ?? '—'}<span className="text-zinc-500 text-[10px]">/{audit?.rawScrape?.scoreBreakdown?.maturityMax || 30}</span></p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Contact Access</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.rawScrape?.scoreBreakdown?.contactability ?? '—'}<span className="text-zinc-500 text-[10px]">/{audit?.rawScrape?.scoreBreakdown?.contactMax || 25}</span></p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">PageSpeed Mobile</p>
-                                                                    <p className={`text-[13px] font-black ${(audit?.rawScrape?.seoAudit?.pagespeed_mobile ?? 100) < 50 ? 'text-red-400' : (audit?.rawScrape?.seoAudit?.pagespeed_mobile ?? 100) < 80 ? 'text-orange-400' : 'text-green-400'}`}>{audit?.rawScrape?.seoAudit?.pagespeed_mobile ?? 'N/A'}<span className="text-zinc-500 text-[10px]">/100</span></p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">PageSpeed Desktop</p>
-                                                                    <p className={`text-[13px] font-black ${(audit?.rawScrape?.seoAudit?.pagespeed_desktop ?? 100) < 50 ? 'text-red-400' : (audit?.rawScrape?.seoAudit?.pagespeed_desktop ?? 100) < 80 ? 'text-orange-400' : 'text-green-400'}`}>{audit?.rawScrape?.seoAudit?.pagespeed_desktop ?? 'N/A'}<span className="text-zinc-500 text-[10px]">/100</span></p>
-                                                                </div>
-                                                            </div>
-                                                            {/* Right column */}
-                                                            <div className="flex flex-col gap-0 divide-y divide-zinc-800/60">
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Google Rating</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">⭐ {drawerLead.rating ?? '—'}<span className="text-zinc-500 text-[10px]"> ({drawerLead.ratingCount ?? 0} reviews)</span></p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Win Probability</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">{drawerLead.win_probability ?? <span className="text-zinc-600">Not set</span>}</p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">IG Followers</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">{drawerLead.ig_followers ?? <span className="text-zinc-600">Not tracked</span>}</p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">IG Activity</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">{drawerLead.ig_activity ?? <span className="text-zinc-600">Not tracked</span>}</p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Load Time</p>
-                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.rawScrape?.seoAudit?.mobile_load_time ?? 'N/A'}</p>
-                                                                </div>
-                                                                <div className="px-3 py-2">
-                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Manual Notes</p>
-                                                                    <p className="text-[12px] font-bold text-zinc-300 truncate">{drawerLead.manual_notes || <span className="text-zinc-600">None</span>}</p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        {/* Biggest Weakness */}
-                                                        {audit?.biggestWeakness && (
-                                                            <div className="px-4 py-2.5 border-t border-zinc-800 bg-zinc-950/50">
-                                                                <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-1">🎯 Top Priority Issue <span className="text-zinc-600 normal-case">(auto-selected by scoring engine)</span></p>
-                                                                <p className="text-[11px] font-bold text-orange-400">{audit.biggestWeakness}</p>
-                                                            </div>
-                                                        )}
-                                                        {/* Rules count chips */}
-                                                        <div className="px-4 py-2.5 border-t border-zinc-800 flex gap-2 flex-wrap">
-                                                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-zinc-800 text-zinc-400">{audit?.rawScrape?.scoreBreakdown?.uxRules?.filter((r: any) => r.isTriggered).length ?? 0} UX Issues</span>
-                                                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-zinc-800 text-zinc-400">{audit?.rawScrape?.scoreBreakdown?.maturityRules?.filter((r: any) => r.isTriggered).length ?? 0} Maturity Signals</span>
-                                                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-zinc-800 text-zinc-400">{audit?.rawScrape?.scoreBreakdown?.contactRules?.filter((r: any) => r.isTriggered).length ?? 0} Contact Signals</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-center space-y-2">
-                                                        <h3 className="text-sm font-black text-zinc-300 uppercase tracking-[0.3em]">AI Outreach Pitch</h3>
-                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 leading-relaxed mx-auto">
-                                                            Generate a tailored email sequence for {drawerLead.name} based on the data above.
+                                                <div className="flex flex-col p-4 gap-6">
+                                                    <div className="text-center space-y-2 py-4">
+                                                        <h3 className="text-sm font-black text-zinc-300 uppercase tracking-[0.3em]">Outreach Pitch</h3>
+                                                        <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 leading-relaxed mx-auto max-w-[280px]">
+                                                            Generate a tailored email sequence for {drawerLead.name} based on the audit data.
                                                         </p>
                                                     </div>
-                                                    <Button
-                                                        onClick={async () => {
-                                                            setIsGeneratingAI(true);
-                                                            try {
-                                                                const res = await generateOutreachSuggestions({
-                                                                    name: drawerLead.name,
-                                                                    niche: drawerLead.niche,
-                                                                    website: drawerLead.website,
-                                                                    score: audit?.score,
-                                                                    maxScore: audit?.max_score || 85,
-                                                                    seoScore: audit?.rawScrape?.scoreBreakdown?.uxDecayTechnical,
-                                                                    uxMax: audit?.rawScrape?.scoreBreakdown?.uxMax || 30,
-                                                                    localIntentScore: audit?.rawScrape?.scoreBreakdown?.cashFlowMaturity,
-                                                                    maturityMax: audit?.rawScrape?.scoreBreakdown?.maturityMax || 30,
-                                                                    contactabilityScore: audit?.rawScrape?.scoreBreakdown?.contactability,
-                                                                    contactMax: audit?.rawScrape?.scoreBreakdown?.contactMax || 25,
-                                                                    biggestWeakness: audit?.biggestWeakness,
-                                                                    manualNotes: manualNotes || drawerLead.manual_notes,
-                                                                    rating: drawerLead.rating,
-                                                                    ratingCount: drawerLead.ratingCount,
-                                                                    winProbability: drawerLead.win_probability,
-                                                                    igFollowers: drawerLead.ig_followers,
-                                                                    igActivity: drawerLead.ig_activity,
-                                                                    pagespeedMobile: audit?.rawScrape?.seoAudit?.pagespeed_mobile,
-                                                                    pagespeedDesktop: audit?.rawScrape?.seoAudit?.pagespeed_desktop,
-                                                                    mobileLoadTime: audit?.rawScrape?.seoAudit?.mobile_load_time,
-                                                                    rawAudit: audit?.rawScrape,
-                                                                    scoringRules: {
-                                                                        uxRules: audit?.rawScrape?.scoreBreakdown?.uxRules || [],
-                                                                        maturityRules: audit?.rawScrape?.scoreBreakdown?.maturityRules || [],
-                                                                        contactRules: audit?.rawScrape?.scoreBreakdown?.contactRules || [],
-                                                                        rulesTriggered: audit?.rawScrape?.scoreBreakdown?.rulesTriggered || [],
-                                                                    }
-                                                                });
-                                                                if (res.error) throw new Error(res.error);
-                                                                setAiSuggestions(res.data);
-                                                            } catch (e: any) {
-                                                                toast.error(e.message || "Failed to generate pitch");
-                                                            } finally {
-                                                                setIsGeneratingAI(false);
-                                                            }
-                                                        }}
-                                                        className="bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 hover:border-brand/40 font-black uppercase tracking-widest text-[10px] h-11 px-8 rounded-xl shadow-sm active:scale-95 transition-all mt-4"
-                                                    >
-                                                        <Sparkles className="h-3.5 w-3.5 mr-2" /> Generate AI Pitch
-                                                    </Button>
+
+                                                    {/* Template / AI Selector */}
+                                                    <div className="flex bg-zinc-900/50 p-1 rounded-xl border border-zinc-800 self-center">
+                                                        <button 
+                                                            onClick={() => setOutreachMethod('ai')}
+                                                            className={cn(
+                                                                "px-4 py-1.5 rounded-lg text-sm font-black uppercase tracking-widest transition-all",
+                                                                outreachMethod === 'ai' ? "bg-zinc-800 text-brand shadow-sm" : "text-zinc-500 hover:text-zinc-400"
+                                                            )}
+                                                        >
+                                                            Generate AI
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => setOutreachMethod('static')}
+                                                            className={cn(
+                                                                "px-4 py-1.5 rounded-lg text-sm font-black uppercase tracking-widest transition-all",
+                                                                outreachMethod === 'static' ? "bg-zinc-800 text-brand shadow-sm" : "text-zinc-500 hover:text-zinc-400"
+                                                            )}
+                                                        >
+                                                            Templates
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Template Selector */}
+                                                    <div className="space-y-3 transition-all">
+                                                        <label className="text-sm font-black text-zinc-500 uppercase tracking-[0.2em] block text-center">Select Outreach Voice</label>
+                                                        <div className="flex justify-center gap-2">
+                                                            <button
+                                                                onClick={() => setActiveTemplateId('bhav')}
+                                                                className={cn(
+                                                                    "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all border",
+                                                                    activeTemplateId === 'bhav'
+                                                                        ? "bg-brand/10 border-brand/50 text-brand shadow-[0_0_15px_rgba(255,102,0,0.1)]"
+                                                                        : "bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-400 hover:border-zinc-700"
+                                                                )}
+                                                            >
+                                                                Bhav Bains
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setActiveTemplateId('neha')}
+                                                                className={cn(
+                                                                    "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all border",
+                                                                    activeTemplateId === 'neha'
+                                                                        ? "bg-brand/10 border-brand/50 text-brand shadow-[0_0_15px_rgba(255,102,0,0.1)]"
+                                                                        : "bg-zinc-900/50 border-zinc-800 text-zinc-500 hover:text-zinc-400 hover:border-zinc-700"
+                                                                )}
+                                                            >
+                                                                Neha
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {outreachMethod === 'ai' ? (
+                                                        <Button
+                                                            onClick={async () => {
+                                                                setIsGeneratingAI(true);
+                                                                try {
+                                                                    const res = await generateOutreachSuggestions({
+                                                                        name: drawerLead.name,
+                                                                        niche: drawerLead.niche,
+                                                                        website: drawerLead.website,
+                                                                        score: audit?.score,
+                                                                        maxScore: audit?.max_score || 85,
+                                                                        seoScore: audit?.rawScrape?.scoreBreakdown?.uxDecayTechnical,
+                                                                        uxMax: audit?.rawScrape?.scoreBreakdown?.uxMax || 30,
+                                                                        localIntentScore: audit?.rawScrape?.scoreBreakdown?.cashFlowMaturity,
+                                                                        maturityMax: audit?.rawScrape?.scoreBreakdown?.maturityMax || 30,
+                                                                        contactabilityScore: audit?.rawScrape?.scoreBreakdown?.contactability,
+                                                                        contactMax: audit?.rawScrape?.scoreBreakdown?.contactMax || 25,
+                                                                        biggestWeakness: audit?.biggestWeakness,
+                                                                        manualNotes: manualNotes || drawerLead.manual_notes,
+                                                                        rating: drawerLead.rating,
+                                                                        ratingCount: drawerLead.ratingCount,
+                                                                        winProbability: drawerLead.win_probability,
+                                                                        igFollowers: drawerLead.ig_followers,
+                                                                        igActivity: drawerLead.ig_activity,
+                                                                        pagespeedMobile: audit?.rawScrape?.seoAudit?.pagespeed_mobile,
+                                                                        pagespeedDesktop: audit?.rawScrape?.seoAudit?.pagespeed_desktop,
+                                                                        mobileLoadTime: audit?.rawScrape?.seoAudit?.mobile_load_time,
+                                                                        rawAudit: audit?.rawScrape,
+                                                                        scoringRules: {
+                                                                            uxRules: audit?.rawScrape?.scoreBreakdown?.uxRules || [],
+                                                                            maturityRules: audit?.rawScrape?.scoreBreakdown?.maturityRules || [],
+                                                                            contactRules: audit?.rawScrape?.scoreBreakdown?.contactRules || [],
+                                                                            rulesTriggered: audit?.rawScrape?.scoreBreakdown?.rulesTriggered || [],
+                                                                        }
+                                                                    }, activeTemplateId);
+                                                                    if (res.error) throw new Error(res.error);
+                                                                    setAiSuggestions(res.data);
+                                                                } catch (e: any) {
+                                                                    toast.error(e.message || "Failed to generate pitch");
+                                                                } finally {
+                                                                    setIsGeneratingAI(false);
+                                                                }
+                                                            }}
+                                                            className="bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 hover:border-brand/40 font-black uppercase tracking-widest text-xs h-11 px-8 rounded-xl shadow-sm active:scale-95 transition-all mt-2"
+                                                        >
+                                                            <Sparkles className="h-3.5 w-3.5 mr-2" /> Generate Pitch
+                                                        </Button>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            <label className="text-sm font-black text-zinc-500 uppercase tracking-[0.2em] block text-center mb-1">Select A Template</label>
+                                                            <div className="grid grid-cols-1 gap-2">
+                                                                {(STATIC_TEMPLATES[activeTemplateId] || []).map((template: any, idx: number) => (
+                                                                    <button
+                                                                        key={idx}
+                                                                        onClick={() => {
+                                                                            const replacements: Record<string, string> = {
+                                                                                '[business_name]': drawerLead.name,
+                                                                                '[city]': drawerLead.city,
+                                                                                '[score]': String(audit?.score || 0),
+                                                                                '[mobile_load_time]': audit?.rawScrape?.seoAudit?.mobile_load_time || 'slow',
+                                                                                '[website]': drawerLead.website || 'your site'
+                                                                            };
+                                                                            
+                                                                            let subject = template.subject;
+                                                                            let emailBody = template.emailBody;
+                                                                            let dmBody = template.dmBody;
+                                                                            
+                                                                            Object.entries(replacements).forEach(([key, val]) => {
+                                                                                const regex = new RegExp(key.replace('[', '\\[').replace(']', '\\]'), 'g');
+                                                                                subject = subject.replace(regex, val);
+                                                                                emailBody = emailBody.replace(regex, val);
+                                                                                dmBody = dmBody.replace(regex, val);
+                                                                            });
+                                                                            
+                                                                            setAiSuggestions({
+                                                                                subjectLine: subject,
+                                                                                emailBody,
+                                                                                dmBody,
+                                                                                keyFindings: ["Manual template selection", "Direct outreach strategy"],
+                                                                                painPoints: ["Scaling technical debt", "Mobile friction"]
+                                                                            });
+                                                                        }}
+                                                                        className="w-full p-3 bg-zinc-900/40 border border-zinc-800 rounded-xl text-left hover:bg-zinc-800/60 hover:border-zinc-700 transition-all group"
+                                                                    >
+                                                                        <div className="flex justify-between items-center">
+                                                                            <span className="text-xs font-black uppercase tracking-widest text-zinc-300 group-hover:text-brand transition-colors">{template.name}</span>
+                                                                            <ChevronRight className="h-3 w-3 text-zinc-600 group-hover:text-brand transition-colors" />
+                                                                        </div>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
                                         {aiSuggestions && (
                                             <div className="p-4 sm:p-5 bg-zinc-950 border-t border-zinc-800/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0 shadow-[0_-20px_40px_rgba(0,0,0,0.5)]">
                                                 <div className="flex flex-col px-2 w-full sm:w-auto min-w-0">
-                                                    <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-0.5">To:</span>
-                                                    <span className="text-[11px] text-zinc-200 font-black uppercase tracking-widest truncate">{audit?.email || drawerLead?.email || 'No email found'}</span>
+                                                    <span className="text-[11px] text-zinc-500 font-black uppercase tracking-widest mb-0.5">To:</span>
+                                                    <span className="text-sm text-zinc-200 font-black uppercase tracking-widest truncate">{audit?.email || drawerLead?.email || 'No email found'}</span>
                                                 </div>
                                                 <div className="flex gap-3 mt-2 sm:mt-0 w-full sm:w-auto">
-                                                    <Button variant="outline" onClick={() => setAiSuggestions(null)} className="flex-1 sm:flex-none h-11 px-4 sm:px-6 rounded-xl border-zinc-800 text-zinc-400 hover:bg-zinc-800 font-bold uppercase tracking-widest text-[10px]">Discard</Button>
+                                                    <Button variant="outline" onClick={() => setAiSuggestions(null)} className="flex-1 sm:flex-none h-11 px-4 sm:px-6 rounded-xl border-zinc-800 text-zinc-400 hover:bg-zinc-800 font-bold uppercase tracking-widest text-xs">Discard</Button>
                                                     {activeReachoutTab === 'email' ? (
                                                         <Button
-                                                            className="flex-1 sm:flex-none h-11 px-4 sm:px-7 font-black text-brand bg-brand/10 hover:bg-brand/20 border border-brand/20 hover:border-brand/40 shadow-sm rounded-xl transition-all uppercase tracking-widest text-[11px]"
+                                                            className="flex-1 sm:flex-none h-11 px-4 sm:px-7 font-black text-brand bg-brand/10 hover:bg-brand/20 border border-brand/20 hover:border-brand/40 shadow-sm rounded-xl transition-all uppercase tracking-widest text-sm"
                                                             disabled={isSendingEmail || (!audit?.email && !drawerLead?.email)}
                                                             onClick={async () => {
                                                                 const emailToSend = audit?.email || drawerLead?.email;
@@ -1674,7 +1713,7 @@ export default function LeadFinder() {
                                                         </Button>
                                                     ) : (
                                                         <Button
-                                                            className="flex-1 sm:flex-none h-11 px-4 sm:px-7 font-black text-zinc-950 bg-brand hover:bg-brand/90 shadow-[0_0_20px_rgba(255,107,0,0.15)] rounded-xl border-0 transition-all uppercase tracking-widest text-[11px]"
+                                                            className="flex-1 sm:flex-none h-11 px-4 sm:px-7 font-black text-zinc-950 bg-brand hover:bg-brand/90 shadow-[0_0_20px_rgba(255,107,0,0.15)] rounded-xl border-0 transition-all uppercase tracking-widest text-sm"
                                                             onClick={async () => {
                                                                 navigator.clipboard.writeText(aiSuggestions.dmBody);
                                                                 toast.success("DM copied to clipboard!");
