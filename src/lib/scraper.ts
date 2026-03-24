@@ -47,16 +47,26 @@ export interface EnrichmentData {
 // SCORE BREAKDOWN (100-Point Engine)
 // ============================================================
 
+export interface ScoringRule {
+    label: string;
+    points: number;
+    isTriggered: boolean;
+}
+
 export interface ScoreBreakdown {
     total: number;
-    uxDecayTechnical: number;   // Category 1: max 45 pts
+    maxTotal: number;
+    uxDecayTechnical: number;   // Category 1: max 45 pts (or 30 if no speed)
+    uxMax: number;
     cashFlowMaturity: number;   // Category 2: max 30 pts
+    maturityMax: number;
     contactability: number;     // Category 3: max 25 pts
+    contactMax: number;
     rulesTriggered: string[];   // Legacy: Full list
     // New categorized rules
-    uxRules?: string[];
-    maturityRules?: string[];
-    contactRules?: string[];
+    uxRules?: ScoringRule[];
+    maturityRules?: ScoringRule[];
+    contactRules?: ScoringRule[];
 }
 
 // ============================================================
@@ -454,96 +464,170 @@ interface GoogleData {
 }
 
 export function calculateLeadScore(data: EnrichmentData, google: GoogleData): ScoreBreakdown {
-    let total_score = 0;
+    const uxRules: ScoringRule[] = [];
+    const maturityRules: ScoringRule[] = [];
+    const contactRules: ScoringRule[] = [];
     const rulesTriggered: string[] = [];
-    const uxRules: string[] = [];
-    const maturityRules: string[] = [];
-    const contactRules: string[] = [];
 
     // ============================
-    // CATEGORY 1: UX Decay & Technical Failure (Max 45)
+    // CATEGORY 1: UX Decay & Technical Failure (Max 30 or 45)
     // ============================
-    let uxDecayTechnical = 0;
+    let uxDecayTechnical = 0; // Accumulate penalty points for decay/gaps
+    const hasSpeedData = google.mobilePerformance !== undefined && google.mobilePerformance !== null;
+    const uxMax = hasSpeedData ? 45 : 30;
+    const maxTotal = hasSpeedData ? 100 : 85;
 
+    // 1. PageSpeed (0-50: 15pts, 51-80: 10pts, 81-90: 5pts, 91-100: 0pts)
+    let speedPenalty = 0;
     const mobileScore = google.mobilePerformance ?? 100;
     const desktopScore = google.desktopPerformance ?? 100;
-    if (mobileScore < 60 || desktopScore < 60) {
-        uxDecayTechnical += 15;
-        const msg = mobileScore < 60 ? `Mobile Speed Tool: ${mobileScore}/100 (+15)` : `Desktop Speed Tool: ${desktopScore}/100 (+15)`;
-        rulesTriggered.push(msg);
-        uxRules.push(msg);
+    
+    if (hasSpeedData) {
+        if (mobileScore <= 50) speedPenalty = 15;
+        else if (mobileScore <= 80) speedPenalty = 10;
+        else if (mobileScore <= 90) speedPenalty = 5;
+        else speedPenalty = 0;
     }
 
+    const isSpeedFail = speedPenalty > 0;
+    const speedMsg = hasSpeedData 
+        ? `Mobile Speed: ${mobileScore}/100 (-${speedPenalty} points)` 
+        : `PageSpeed Insights (Fetching...)`;
+    
+    uxRules.push({ 
+        label: speedMsg, 
+        points: speedPenalty, 
+        isTriggered: isSpeedFail || !hasSpeedData 
+    });
+
+    if (isSpeedFail) {
+        uxDecayTechnical += speedPenalty;
+        rulesTriggered.push(`${speedMsg} (+${speedPenalty} pts)`);
+    }
+
+    // 2. SEO Fundamentals (H1/Title/Meta - Max 10 penalty)
     let seoPenalty = 0;
-    if (data.seo.h1Tags.count === 0 || data.seo.h1Tags.count > 1) {
-        seoPenalty += 5;
-        const msg = `H1 Count Error: ${data.seo.h1Tags.count} (+5)`;
-        rulesTriggered.push(msg);
-        uxRules.push(msg);
-    }
-    if (!data.seo.metaDescription.exists || data.seo.titleTag.isEmpty) {
-        seoPenalty += 5;
-        const msg = data.seo.titleTag.isEmpty ? 'Missing Meta Title (+5)' : 'Missing Meta Description (+5)';
-        rulesTriggered.push(msg);
-        uxRules.push(msg);
-    }
+    
+    // H1
+    const isH1Fail = data.seo.h1Tags.count === 0 || data.seo.h1Tags.count > 1;
+    if (isH1Fail) seoPenalty += 5;
+    uxRules.push({ 
+        label: `H1 Tag Structure (${data.seo.h1Tags.count} found)`, 
+        points: isH1Fail ? 5 : 0, 
+        isTriggered: isH1Fail 
+    });
+
+    // Title
+    const isTitleFail = data.seo.titleTag.isEmpty;
+    if (isTitleFail) seoPenalty += 5;
+    uxRules.push({ 
+        label: isTitleFail ? 'Meta Title Missing' : 'Meta Title Optimized', 
+        points: isTitleFail ? 5 : 0, 
+        isTriggered: isTitleFail 
+    });
+
+    // Meta Description
+    const isMetaFail = !data.seo.metaDescription.exists;
+    if (isMetaFail) seoPenalty += 5;
+    uxRules.push({ 
+        label: isMetaFail ? 'Meta Description Missing' : 'Meta Description Found', 
+        points: isMetaFail ? 5 : 0, 
+        isTriggered: isMetaFail 
+    });
+
     uxDecayTechnical += Math.min(seoPenalty, 10);
 
+    // 3. Structural & AI (Max 10 penalty)
     let structuralPenalty = 0;
-    if (!data.seo.hasSchemaMarkup) {
-        structuralPenalty += 5;
-        const msg = 'Missing Schema.org Markup (+5)';
-        rulesTriggered.push(msg);
-        uxRules.push(msg);
-    }
-    if (data.seo.revenuePagesCount <= 1 || data.seo.isSinglePage) {
-        structuralPenalty += 5;
-        const msg = data.seo.isSinglePage ? 'Single Page Site (+5)' : 'Thin Service Content (+5)';
-        rulesTriggered.push(msg);
-        uxRules.push(msg);
-    }
+    
+    // Schema
+    const isSchemaFail = !data.seo.hasSchemaMarkup;
+    if (isSchemaFail) structuralPenalty += 5;
+    uxRules.push({ 
+        label: 'Schema.org JSON-LD Markup', 
+        points: isSchemaFail ? 5 : 0, 
+        isTriggered: isSchemaFail 
+    });
+
+    // Content Depth
+    const isContentFail = data.seo.revenuePagesCount <= 1 || data.seo.isSinglePage;
+    if (isContentFail) structuralPenalty += 5;
+    uxRules.push({ 
+        label: data.seo.isSinglePage ? 'Single Page Site Structure' : 'Thin Service Content', 
+        points: isContentFail ? 5 : 0, 
+        isTriggered: isContentFail 
+    });
+
     uxDecayTechnical += Math.min(structuralPenalty, 10);
 
-    let conversionPenalty = 0;
+    // 6. Conversion (Booking)
     const hasBooking = data.ctas.bookingUrls.length > 0;
-    if (!data.ctas.hasGeneralCTA || !hasBooking) {
-        conversionPenalty += 5;
-        const msg = !hasBooking ? 'No Online Booking (+5)' : 'No CTA Keywords (+5)';
-        rulesTriggered.push(msg);
-        uxRules.push(msg);
+    const isBookingFail = !hasBooking;
+    const bookingPoints = isBookingFail ? 5 : 0;
+    const bookingMsg = 'Online Booking/Scheduling System';
+    uxRules.push({ label: bookingMsg, points: bookingPoints, isTriggered: isBookingFail });
+    if (isBookingFail) {
+        uxDecayTechnical += bookingPoints;
+        rulesTriggered.push(`${bookingMsg} (+${bookingPoints} pts)`);
     }
-    if (!data.ctas.hasReviewWidget || !data.seo.hasOgImage) {
-        conversionPenalty += 5;
-        const msg = !data.ctas.hasReviewWidget ? 'Missing Review Widget (+5)' : 'Missing OG Social Image (+5)';
-        rulesTriggered.push(msg);
-        uxRules.push(msg);
+
+    // 7. Conversion (CTA Polish)
+    const isCtaFail = !data.ctas.hasGeneralCTA;
+    const ctaPoints = isCtaFail ? 5 : 0;
+    const ctaMsg = 'Conversion-Focused CTA Keywords';
+    uxRules.push({ label: ctaMsg, points: ctaPoints, isTriggered: isCtaFail });
+    if (isCtaFail) {
+        uxDecayTechnical += ctaPoints;
+        rulesTriggered.push(`${ctaMsg} (+${ctaPoints} pts)`);
     }
-    uxDecayTechnical += Math.min(conversionPenalty, 10);
-    uxDecayTechnical = Math.min(uxDecayTechnical, 45);
+
+    // 8. Conversion (Trust Signals)
+    const isTrustFail = !data.ctas.hasReviewWidget || !data.seo.hasOgImage;
+    const trustPoints = isTrustFail ? 5 : 0;
+    const trustMsg = !data.ctas.hasReviewWidget ? 'Customer Review Widget' : 'Social OG Image Tags';
+    uxRules.push({ label: isTrustFail ? trustMsg : 'Verified Trust Signals', points: trustPoints, isTriggered: isTrustFail });
+    if (isTrustFail) {
+        uxDecayTechnical += trustPoints;
+        rulesTriggered.push(`${trustMsg} (+${trustPoints} pts)`);
+    }
+
+    uxDecayTechnical = Math.min(uxDecayTechnical, uxMax);
 
     // ============================
     // CATEGORY 2: Cash Flow & Maturity (Max 30)
     // ============================
     let cashFlowMaturity = 0;
 
-    if (data.pixels.hasMetaPixel || data.pixels.hasGoogleAds) {
-        cashFlowMaturity += 15;
-        const msg = data.pixels.hasMetaPixel ? 'Active Meta Ads (+15)' : 'Active Google Ads (+15)';
-        rulesTriggered.push(msg);
-        maturityRules.push(msg);
+    // 1. Paid Traffic
+    const hasAds = data.pixels.hasMetaPixel || data.pixels.hasGoogleAds;
+    const adsPoints = hasAds ? 15 : 0;
+    const adsMsg = data.pixels.hasMetaPixel ? 'Active Meta Ads Traffic' : 'Active Google Ads Traffic';
+    maturityRules.push({ label: hasAds ? adsMsg : 'No Active Paid Ads Found', points: adsPoints, isTriggered: hasAds });
+    if (hasAds) {
+        cashFlowMaturity += adsPoints;
+        rulesTriggered.push(`${adsMsg} (+${adsPoints})`);
     }
-    if (google.reviewCount >= 40) {
-        cashFlowMaturity += 10;
-        const msg = `Review Maturity (${google.reviewCount} reviews) (+10)`;
-        rulesTriggered.push(msg);
-        maturityRules.push(msg);
+
+    // 2. Review Maturity
+    const isMature = google.reviewCount >= 40;
+    const maturePoints = isMature ? 10 : 0;
+    const matureMsg = `GMB Review Maturity (${google.reviewCount} reviews)`;
+    maturityRules.push({ label: matureMsg, points: maturePoints, isTriggered: isMature });
+    if (isMature) {
+        cashFlowMaturity += maturePoints;
+        rulesTriggered.push(`${matureMsg} (+${maturePoints})`);
     }
-    if (data.expansionKeywords.length > 0) {
-        cashFlowMaturity += 5;
-        const msg = 'Growth Mode (Hiring/Careers) (+5)';
-        rulesTriggered.push(msg);
-        maturityRules.push(msg);
+
+    // 3. Growth Tracking
+    const isGrowth = data.expansionKeywords.length > 0;
+    const growthPoints = isGrowth ? 5 : 0;
+    const growthMsg = 'Growth Mode (Hiring/Careers Page)';
+    maturityRules.push({ label: growthMsg, points: growthPoints, isTriggered: isGrowth });
+    if (isGrowth) {
+        cashFlowMaturity += growthPoints;
+        rulesTriggered.push(`${growthMsg} (+${growthPoints})`);
     }
+
     cashFlowMaturity = Math.min(cashFlowMaturity, 30);
 
     // ============================
@@ -553,34 +637,57 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
     const personalEmails = data.contacts.emails.filter(e => e.type?.toLowerCase() === 'personal');
     const genericEmails = data.contacts.emails.filter(e => e.type?.toLowerCase() === 'generic');
 
+    // 1. Email Tier
     if (personalEmails.length > 0) {
         contactability += 20;
-        const msg = 'Direct DM Access (+20)';
-        rulesTriggered.push(msg);
-        contactRules.push(msg);
+        const msg = 'Direct Owner/Personal Email Access';
+        contactRules.push({ label: msg, points: 20, isTriggered: true });
+        rulesTriggered.push(`${msg} (+20)`);
     } else if (genericEmails.length > 0) {
         contactability += 10;
-        const msg = 'Gatekeeper (Info/Contact) (+10)';
-        rulesTriggered.push(msg);
-        contactRules.push(msg);
+        const msg = 'Generic Business Email (Gatekeeper)';
+        contactRules.push({ label: msg, points: 10, isTriggered: true });
+        rulesTriggered.push(`${msg} (+10)`);
+    } else {
+        contactRules.push({ label: 'No Valid Email Contacts Found', points: 0, isTriggered: false });
     }
 
+    // 2. Fallback Channels
     const hasSocials = data.socials.instagram || data.socials.facebook || data.socials.tiktok;
-    if (data.contacts.hasContactForm || hasSocials) {
-        contactability += 5;
-        const msg = data.contacts.hasContactForm ? 'Contact Form Detected (+5)' : 'Social Channels Found (+5)';
-        rulesTriggered.push(msg);
-        contactRules.push(msg);
+    const isContactForm = data.contacts.hasContactForm;
+    if (isContactForm || hasSocials) {
+        const points = 5;
+        contactability += points;
+        const msg = isContactForm ? 'Direct Web Inquiry Form' : 'Social Media Intake Channels';
+        contactRules.push({ label: msg, points: 5, isTriggered: true });
+        rulesTriggered.push(`${msg} (+5)`);
+    } else {
+        contactRules.push({ label: 'Secondary Contact Channels Missing', points: 0, isTriggered: false });
     }
+
     contactability = Math.min(contactability, 25);
 
-    total_score = uxDecayTechnical + cashFlowMaturity + contactability;
+    const total_score = uxDecayTechnical + cashFlowMaturity + contactability;
+
+    uxRules.forEach(r => {
+        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label} (+${r.points})`);
+    });
+    maturityRules.forEach(r => {
+        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label} (+${r.points})`);
+    });
+    contactRules.forEach(r => {
+        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label} (+${r.points})`);
+    });
 
     return {
         total: total_score,
+        maxTotal,
         uxDecayTechnical,
+        uxMax,
         cashFlowMaturity,
+        maturityMax: 30,
         contactability,
+        contactMax: 25,
         rulesTriggered: rulesTriggered.slice(0, 5),
         uxRules,
         maturityRules,
@@ -614,12 +721,20 @@ export async function scrapeWebsite(
 
     const subPageUrls = findSubPageUrls(homepage$, url);
 
-    for (const subUrl of subPageUrls) {
-        const subHtml = await safeFetch(subUrl);
-        if (!subHtml) continue;
-        const sub$ = cheerio.load(subHtml);
-        const light = extractLight(sub$, subHtml);
+    const subResults = await Promise.all(subPageUrls.map(async (subUrl) => {
+        try {
+            const subHtml = await safeFetch(subUrl);
+            if (!subHtml) return null;
+            const sub$ = cheerio.load(subHtml);
+            return extractLight(sub$, subHtml);
+        } catch (e) {
+            console.error(`Error scraping sub-page ${subUrl}:`, e);
+            return null;
+        }
+    }));
 
+    for (const light of subResults) {
+        if (!light) continue;
         contacts = {
             emails: mergeEmails(contacts.emails, light.emails),
             hasContactForm: contacts.hasContactForm || light.hasContactForm,

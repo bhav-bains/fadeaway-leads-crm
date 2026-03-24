@@ -24,10 +24,10 @@ I have a lead for a ${leadData.niche || 'local business'} called "${leadData.nam
 
 Business Data Summary:
 - Website: ${leadData.website || 'None'}
-- Audit Score: ${leadData.score || 0}/100 (Overall)
-- UX/SEO Score: ${leadData.seoScore || 0}/45 (Category: Technical/SEO)
-- Local Trust Score: ${leadData.localIntentScore || 0}/30 (Category: Reviews/Maps)
-- Contactability: ${leadData.contactabilityScore || 0}/25 (Category: Inbox/Form access)
+- Audit Score: ${leadData.score || 0}/${leadData.maxScore || 85} (Overall)
+- UX/SEO Score: ${leadData.seoScore || 0}/${leadData.uxMax || 30} (Category: Technical/SEO)
+- Local Trust Score: ${leadData.localIntentScore || 0}/${leadData.maturityMax || 30} (Category: Reviews/Maps)
+- Contactability: ${leadData.contactabilityScore || 0}/${leadData.contactMax || 25} (Category: Inbox/Form access)
 - Biggest Weakness: ${leadData.biggestWeakness || 'None'}
 - Manual Notes: ${leadData.manualNotes || 'None'}.
 
@@ -56,10 +56,10 @@ ${customPrompt}
 Lead Context:
 Name: ${leadData.name || 'Unknown'}
 Website: ${leadData.website || 'No website'}
-Overall Score: ${leadData.score || 'Unknown'}/100
-SEO Score: ${leadData.seoScore || 0}/45
-Trust Score: ${leadData.localIntentScore || 0}/30
-Contactability: ${leadData.contactabilityScore || 0}/25
+Overall Score: ${leadData.score || 'Unknown'}/${leadData.maxScore || 85}
+SEO Score: ${leadData.seoScore || 0}/${leadData.uxMax || 30}
+Trust Score: ${leadData.localIntentScore || 0}/${leadData.maturityMax || 30}
+Contactability: ${leadData.contactabilityScore || 0}/${leadData.contactMax || 25}
 Biggest Weakness: ${leadData.biggestWeakness || 'None detected'}
 
 Please return a raw JSON object (NO Markdown formatting, just valid JSON) with exactly this structure:

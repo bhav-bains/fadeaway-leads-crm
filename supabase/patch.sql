@@ -24,3 +24,7 @@ ADD COLUMN IF NOT EXISTS has_expansion_keywords BOOLEAN,
 ADD COLUMN IF NOT EXISTS has_contact_form BOOLEAN,
 ADD COLUMN IF NOT EXISTS top_keywords_found TEXT[] DEFAULT '{}',
 ADD COLUMN IF NOT EXISTS schema_org_types TEXT[] DEFAULT '{}';
+
+-- 3. Updates to the `scores` table
+ALTER TABLE public.scores 
+ADD COLUMN IF NOT EXISTS score_max INT DEFAULT 85;

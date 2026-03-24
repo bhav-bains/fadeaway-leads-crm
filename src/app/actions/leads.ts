@@ -155,13 +155,11 @@ export async function insertLead(
     // 5. Save or Update SEO Audit Results
     if (scrapeResult) {
 
-        // Wipe existing child rows cleanly rather than crafting complex merging logic per table
-        // This simulates a fresh "Upsert" of the audit data every time we re-scrape.
+        // 5a. Technical & Performance Refresh (Technical data overrides)
         if (existingCompany) {
             await supabase.from('seo_audits').delete().eq('company_id', companyId);
             await supabase.from('scores').delete().eq('company_id', companyId);
-            await supabase.from('contacts').delete().eq('company_id', companyId);
-            await supabase.from('socials').delete().eq('company_id', companyId);
+            // NOTE: We no longer delete contacts and socials here to implement "Sticky Contacts"
         }
 
         // Insert fresh SEO Audits
@@ -184,38 +182,53 @@ export async function insertLead(
             has_meta_pixel: scrapeResult.seoAudit?.has_meta_pixel || false,
             has_google_ads_tag: scrapeResult.seoAudit?.has_google_ads_tag || false,
             has_expansion_keywords: scrapeResult.seoAudit?.has_expansion_keywords || false,
-            has_contact_form: scrapeResult.seoAudit?.has_contact_form || false
+            has_contact_form: scrapeResult.seoAudit?.has_contact_form || false,
+            pagespeed_mobile: scrapeResult.seoAudit?.pagespeed_mobile || null,
+            pagespeed_desktop: scrapeResult.seoAudit?.pagespeed_desktop || null
         }]);
 
         // Insert fresh Scores
         await supabase.from('scores').insert([{
             company_id: companyId,
-            score_overall: scrapeResult.totalScore || 0,
-            score_contactability: scrapeResult.contactabilityScore || 0,
-            score_seo: scrapeResult.seoScore || 0,
-            score_local_intent: scrapeResult.localIntentScore || 0,
-            score_fit: scrapeResult.fitScore || 0
+            score_overall: (scrapeResult as any).scoreBreakdown?.total || 0,
+            score_max: (scrapeResult as any).scoreBreakdown?.maxTotal || 85,
+            score_contactability: (scrapeResult as any).contactabilityScore || 0,
+            score_seo: (scrapeResult as any).seoScore || 0,
+            score_local_intent: (scrapeResult as any).localIntentScore || 0,
+            score_fit: (scrapeResult as any).fitScore || 0
         }]);
 
-        // Insert fresh Contacts
+        // 5d. "Sticky" Contacts & Socials (Additive logic)
+        // We only insert ones that don't already exist for this company
         if (scrapeResult.emails && scrapeResult.emails.length > 0) {
-            const contactInserts = scrapeResult.emails.map((e: Record<string, any>) => ({
-                company_id: companyId,
-                email: e.email,
-                type: e.type,
-                confidence: 90
-            }));
-            await supabase.from('contacts').insert(contactInserts);
+            const { data: existingEmails } = await supabase.from('contacts').select('email').eq('company_id', companyId);
+            const seenEmails = new Set(existingEmails?.map((e: any) => e.email.toLowerCase()) || []);
+            
+            const newEmails = scrapeResult.emails.filter((e: any) => !seenEmails.has(e.email.toLowerCase()));
+            if (newEmails.length > 0) {
+                const contactInserts = newEmails.map((e: Record<string, any>) => ({
+                    company_id: companyId,
+                    email: e.email,
+                    type: e.type,
+                    confidence: 90
+                }));
+                await supabase.from('contacts').insert(contactInserts);
+            }
         }
 
-        // Insert fresh Socials
         if (scrapeResult.socials && scrapeResult.socials.length > 0) {
-            const socialInserts = scrapeResult.socials.map((s: Record<string, any>) => ({
-                company_id: companyId,
-                platform: s.platform,
-                url: s.url
-            }));
-            await supabase.from('socials').insert(socialInserts);
+            const { data: existingSocials } = await supabase.from('socials').select('url').eq('company_id', companyId);
+            const seenUrls = new Set(existingSocials?.map((s: any) => s.url.toLowerCase()) || []);
+
+            const newSocials = scrapeResult.socials.filter((s: any) => !seenUrls.has(s.url.toLowerCase()));
+            if (newSocials.length > 0) {
+                const socialInserts = newSocials.map((s: Record<string, any>) => ({
+                    company_id: companyId,
+                    platform: s.platform,
+                    url: s.url
+                }));
+                await supabase.from('socials').insert(socialInserts);
+            }
         }
     } else if (!existingCompany) {
         // Fallback empty scores only if this is a brand new company with no website
@@ -272,15 +285,39 @@ export async function runLocalSeoAudit(
             }
         }
 
-        const scrape = await scrapeWebsite(
-            urlToScrape, 
-            city, 
-            niche, 
-            leadMeta?.reviewCount || 0, 
-            0, // reviewAvg fallback
-            existingAudit?.pagespeed_mobile,
-            existingAudit?.pagespeed_desktop
-        );
+        // PARALLEL EXECUTION: Scrape Website AND Fetch PageSpeed simultaneously
+        const [scrape, pagespeed] = await Promise.all([
+            scrapeWebsite(
+                urlToScrape, 
+                city, 
+                niche, 
+                leadMeta?.reviewCount || 0, 
+                0, // reviewAvg fallback
+                existingAudit?.pagespeed_mobile, // Optional: use existing if new fails
+                existingAudit?.pagespeed_desktop
+            ),
+            fetchPageSpeedMetrics(urlToScrape)
+        ]);
+
+        // If newly fetched PageSpeed is available, recalculate the 100-pt score immediately
+        if (pagespeed && !('error' in pagespeed)) {
+            const finalScore = calculateLeadScore(scrape.enrichment, {
+                url: website,
+                reviewCount: leadMeta?.reviewCount || 0,
+                reviewAvg: 0,
+                mobilePerformance: pagespeed.pagespeed_mobile,
+                desktopPerformance: pagespeed.pagespeed_desktop
+            });
+
+            // Update scrape result with final 100pt scores before saving
+            scrape.scoreBreakdown = finalScore;
+            scrape.totalScore = finalScore.total;
+            scrape.seoAudit = {
+                ...scrape.seoAudit,
+                pagespeed_mobile: pagespeed.pagespeed_mobile,
+                pagespeed_desktop: pagespeed.pagespeed_desktop
+            };
+        }
 
         let finalCompanyId: string | undefined;
 
@@ -312,7 +349,8 @@ export async function runLocalSeoAudit(
         return {
             data: {
                 companyId: finalCompanyId,
-                score: scrape.totalScore,
+                score: scrape.scoreBreakdown.total,
+                max_score: scrape.scoreBreakdown.maxTotal,
                 email: scrape.emails[0]?.email || '',
                 biggestWeakness: scrape.biggestWeakness,
                 bookingDetected: scrape.seoAudit.has_booking_link,
@@ -420,8 +458,11 @@ export async function updateLeadManualData(
             }])
         }
     }
-
+    
     revalidatePath('/pipeline')
+    // 3. Recalculate Score
+    await recalculateAndSaveScore(companyId, supabase);
+
     revalidatePath('/lead-finder')
     return { success: true }
 }
@@ -524,11 +565,15 @@ export async function updateLeadStatus(companyId: string, status: string) {
     }
 
     revalidatePath('/lead-finder')
+    // 3. Recalculate Score
+    await recalculateAndSaveScore(companyId, supabase);
+
     revalidatePath('/pipeline')
+    revalidatePath('/lead-finder')
     return { success: true }
 }
 
-export async function fetchAndSavePageSpeed(companyId: string, website: string) {
+export async function fetchPageSpeedMetrics(website: string) {
     if (!website) return { error: "No website provided" };
     let urlToScrape = website;
     if (!urlToScrape.startsWith('http')) {
@@ -551,8 +596,102 @@ export async function fetchAndSavePageSpeed(companyId: string, website: string) 
 
         const pagespeed_mobile = mobileScoreRaw !== undefined ? Math.round(mobileScoreRaw * 100) : null;
         const pagespeed_desktop = desktopScoreRaw !== undefined ? Math.round(desktopScoreRaw * 100) : null;
-        
         const mobile_load_time = mobileData?.lighthouseResult?.audits?.['speed-index']?.displayValue || null;
+
+        return { pagespeed_mobile, pagespeed_desktop, mobile_load_time };
+    } catch (error) {
+        console.error("PageSpeed Fetch Error:", error);
+        return { error: "Failed to fetch PageSpeed" };
+    }
+}
+
+async function recalculateAndSaveScore(companyId: string, supabase: any) {
+    // 1. Get current data to reconstruct EnrichmentData
+    const { data: companyDetails } = await supabase
+        .from('companies')
+        .select(`
+            *,
+            seo_audits(*),
+            contacts(*),
+            socials(*),
+            scores(*)
+        `)
+        .eq('id', companyId)
+        .single();
+
+    if (!companyDetails) return null;
+
+    const audit = companyDetails.seo_audits?.[0];
+    if (!audit) return null;
+
+    // 2. Map to EnrichmentData
+    const mockEnrichment: any = {
+        contacts: {
+            emails: companyDetails.contacts?.map((c: any) => ({ email: c.email, type: c.type || 'generic' })) || [],
+            hasContactForm: audit.has_contact_form || false,
+            hasPhone: !!companyDetails.phone || !!audit.has_phone,
+        },
+        seo: {
+            h1Tags: { count: audit.h1_count || 0, texts: [] },
+            titleTag: { text: '', isEmpty: !audit.has_title },
+            metaDescription: { exists: !!audit.has_meta_description, content: '' },
+            hasOgImage: !!audit.has_og_image,
+            hasViewport: true,
+            hasNoIndex: false,
+            hasSchemaMarkup: (audit.schema_org_types && audit.schema_org_types.length > 0) || !!audit.has_schema,
+            revenuePagesCount: audit.revenue_pages_count || 0,
+            isSinglePage: audit.is_single_page || false,
+        },
+        pixels: {
+            hasMetaPixel: !!audit.has_meta_pixel,
+            hasGoogleAds: !!audit.has_google_ads_tag,
+        },
+        expansionKeywords: audit.top_keywords_found || [],
+        ctas: {
+            hasGeneralCTA: !!audit.has_cta_keywords,
+            hasReviewWidget: !!audit.has_review_widget,
+            bookingUrls: audit.has_booking_link ? [{ platform: 'detected', url: '' }] : []
+        },
+        socials: { 
+            instagram: companyDetails.socials?.find((s: any) => s.platform === 'instagram') ? { url: '', handle: '' } : null,
+            facebook: companyDetails.socials?.find((s: any) => s.platform === 'facebook') ? { url: '' } : null,
+            tiktok: companyDetails.socials?.find((s: any) => s.platform === 'tiktok') ? { url: '' } : null,
+        },
+        uxDecay: {
+            copyrightYear: null,
+            isOutdatedCopyright: false,
+            usesCheapBuilder: !!audit.uses_cheap_builder
+        }
+    };
+
+    // 3. Recalculate
+    const newScore = calculateLeadScore(mockEnrichment, {
+        url: companyDetails.website || '',
+        reviewCount: companyDetails.rating_count || 0,
+        reviewAvg: companyDetails.rating_avg || 0,
+        mobilePerformance: audit.pagespeed_mobile,
+        desktopPerformance: audit.pagespeed_desktop
+    });
+
+    // 4. Save to DB
+    await supabase.from('scores').update({
+        score_overall: newScore.total,
+        score_max: newScore.maxTotal,
+        score_contactability: newScore.contactability,
+        score_seo: newScore.uxDecayTechnical,
+        score_local_intent: newScore.cashFlowMaturity,
+        score_fit: 0
+    }).eq('company_id', companyId);
+
+    return newScore;
+}
+
+export async function fetchAndSavePageSpeed(companyId: string, website: string) {
+    try {
+        const metrics = await fetchPageSpeedMetrics(website);
+        if ('error' in metrics) throw new Error(metrics.error);
+
+        const { pagespeed_mobile, pagespeed_desktop, mobile_load_time } = metrics;
 
         const supabase = await createClient();
         
@@ -582,64 +721,8 @@ export async function fetchAndSavePageSpeed(companyId: string, website: string) 
 
         if (updateError) throw new Error(updateError.message);
 
-        // 3. Recalculate Score with new performance metrics
-        const mockEnrichment: any = {
-            contacts: {
-                emails: companyDetails.contacts?.map((c: any) => ({ email: c.email, type: c.type || 'generic' })) || [],
-                hasContactForm: audit.has_contact_form || false,
-                hasPhone: !!companyDetails.phone,
-            },
-            seo: {
-                h1Tags: { count: audit.h1_count || 0, texts: [] },
-                titleTag: { text: '', isEmpty: !audit.has_title },
-                metaDescription: { exists: !!audit.has_meta_description, content: '' },
-                hasOgImage: !!audit.has_og_image,
-                hasViewport: true,
-                hasNoIndex: false,
-                hasSchemaMarkup: (audit.schema_org_types && audit.schema_org_types.length > 0) || !!audit.has_schema,
-                revenuePagesCount: audit.revenue_pages_count || 0,
-                isSinglePage: audit.is_single_page || false,
-            },
-            pixels: {
-                hasMetaPixel: !!audit.has_meta_pixel,
-                hasGoogleAds: !!audit.has_google_ads_tag,
-            },
-            expansionKeywords: audit.top_keywords_found || [],
-            ctas: {
-                hasGeneralCTA: !!audit.has_cta_keywords,
-                hasReviewWidget: !!audit.has_review_widget,
-                bookingUrls: audit.has_booking_link ? [{ platform: 'detected', url: '' }] : []
-            },
-            socials: { 
-                instagram: companyDetails.socials?.find((s: any) => s.platform === 'instagram') ? { url: '', handle: '' } : null,
-                facebook: companyDetails.socials?.find((s: any) => s.platform === 'facebook') ? { url: '' } : null,
-                tiktok: companyDetails.socials?.find((s: any) => s.platform === 'tiktok') ? { url: '' } : null,
-            },
-            uxDecay: {
-                copyrightYear: null,
-                isOutdatedCopyright: false,
-                usesCheapBuilder: !!audit.uses_cheap_builder,
-            }
-        };
-
-        const newScore = calculateLeadScore(mockEnrichment, {
-            url: companyDetails.website || '',
-            reviewCount: companyDetails.rating_count || 0,
-            reviewAvg: companyDetails.rating_avg || 0,
-            mobilePerformance: pagespeed_mobile,
-            desktopPerformance: pagespeed_desktop
-        });
-
-        // 4. Update Score Table
-        await supabase
-            .from('scores')
-            .update({
-                score_overall: newScore.total,
-                score_contactability: newScore.contactability,
-                score_seo: newScore.uxDecayTechnical,
-                score_local_intent: newScore.cashFlowMaturity,
-            })
-            .eq('company_id', companyId);
+        // 2. Recalculate Score with new performance metrics
+        const newScore = await recalculateAndSaveScore(companyId, supabase);
 
         revalidatePath('/lead-finder');
         revalidatePath('/pipeline');

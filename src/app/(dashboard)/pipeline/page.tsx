@@ -52,21 +52,21 @@ function KanbanCard({ lead, onOpen }: { lead: Record<string, any>, onOpen: () =>
             isDragging && "opacity-60 shadow-2xl scale-105 border-brand/50 ring-1 ring-brand/20 z-50 bg-zinc-900"
         )}>
             <div className="flex justify-between items-start mb-2">
-                <span className="font-bold text-[13px] text-zinc-100 uppercase tracking-tight truncate pr-2 group-hover:text-white transition-colors">{lead.name}</span>
+                <span className="font-bold text-[14px] text-zinc-100 uppercase tracking-tight truncate pr-2 group-hover:text-white transition-colors">{lead.name}</span>
                 <Badge variant="outline" className={cn(
-                    "text-[9px] px-1.5 h-5 shrink-0 font-black tracking-widest uppercase",
+                    "text-[11px] px-2 h-5 shrink-0 font-black tracking-widest uppercase",
                     lead.scores?.[0]?.score_overall >= 60 ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10" : "border-zinc-700 text-zinc-400 bg-zinc-800"
                 )}>
-                    {lead.scores?.[0]?.score_overall || 0}/100
+                    {lead.scores?.[0]?.score_overall || 0}/{lead.scores?.[0]?.score_max === 100 || lead.seo_audits?.[0]?.pagespeed_mobile !== null ? 100 : 85}
                 </Badge>
             </div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-3 flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5"><MapPin className="h-3 w-3 text-brand/70" />{lead.city}</div>
-                {lead.niche && <div className="flex items-center gap-1.5 text-zinc-400"><Building2 className="h-3 w-3 text-brand/70" />{lead.niche}</div>}
+            <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-500 mb-3 flex flex-col gap-1.5">
+                <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-brand/70" />{lead.city}</div>
+                {lead.niche && <div className="flex items-center gap-1.5 text-zinc-400"><Building2 className="h-3.5 w-3.5 text-brand/70" />{lead.niche}</div>}
             </div>
-            <div className="flex flex-col gap-1.5 flex-1 mt-2">
-                {lead.contacts?.[0]?.email && <div className="text-[10px] flex items-center gap-1.5 text-zinc-400 font-medium"><Mail className="h-3 w-3 text-zinc-600" />{lead.contacts[0].email}</div>}
-                {lead.phone && <div className="text-[10px] flex items-center gap-1.5 text-zinc-400 font-medium"><Phone className="h-3 w-3 text-zinc-600" />{lead.phone}</div>}
+            <div className="flex flex-col gap-1.5 flex-1 mt-2 text-[11px]">
+                {lead.contacts?.[0]?.email && <div className="flex items-center gap-2 text-zinc-400 font-medium"><Mail className="h-3.5 w-3.5 text-zinc-600" />{lead.contacts[0].email}</div>}
+                {lead.phone && <div className="flex items-center gap-2 text-zinc-400 font-medium"><Phone className="h-3.5 w-3.5 text-zinc-600" />{lead.phone}</div>}
             </div>
             {lead.seo_audits?.[0] && !lead.seo_audits[0].has_booking_link && (
                 <div className="mt-3 text-[9px] font-black uppercase tracking-widest text-red-400 bg-red-950/40 border border-red-900/50 p-1.5 rounded-md flex items-center justify-center gap-1.5">
@@ -454,7 +454,7 @@ export default function CommandDashboard() {
                                                             <TooltipTrigger>
                                                                 <div className="cursor-help inline-block">
                                                                     <Badge variant="outline" className={cn("px-2.5 py-1 font-black uppercase tracking-widest text-[10px]", scoreObj.score_overall >= 60 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-zinc-800 text-zinc-300 border-zinc-700")}>
-                                                                        {scoreObj.score_overall || 0}/100
+                                                                        {scoreObj.score_overall || 0}/{scoreObj.score_max === 100 || lead.seo_audits?.[0]?.pagespeed_mobile !== null ? 100 : 85}
                                                                     </Badge>
                                                                 </div>
                                                             </TooltipTrigger>
@@ -464,7 +464,7 @@ export default function CommandDashboard() {
                                                                     <div className="flex justify-between gap-6"><span className="text-zinc-500 uppercase tracking-widest text-[9px] font-black">SEO Gap</span> <span className="text-brand font-bold">{scoreObj.score_seo || 0} pts</span></div>
                                                                     <div className="flex justify-between gap-6"><span className="text-zinc-500 uppercase tracking-widest text-[9px] font-black">Local Intent</span> <span className="text-brand font-bold">{scoreObj.score_local_intent || 0} pts</span></div>
                                                                     <div className="flex justify-between gap-6"><span className="text-zinc-500 uppercase tracking-widest text-[9px] font-black">Business Fit</span> <span className="text-brand font-bold">{scoreObj.score_fit || 0} pts</span></div>
-                                                                    <div className="border-t border-zinc-800 pt-2 mt-2 flex justify-between font-black"><span className="text-zinc-300 uppercase tracking-widest text-[10px]">Total Score</span> <span className="text-emerald-400">{scoreObj.score_overall || 0}/100</span></div>
+                                                                    <div className="border-t border-zinc-800 pt-2 mt-2 flex justify-between font-black"><span className="text-zinc-300 uppercase tracking-widest text-[10px]">Total Score</span> <span className="text-emerald-400">{scoreObj.score_overall || 0}/{scoreObj.score_max === 100 || lead.seo_audits?.[0]?.pagespeed_mobile !== null ? 100 : 85}</span></div>
                                                                 </div>
                                                             </TooltipContent>
                                                         </Tooltip>
@@ -666,7 +666,7 @@ export default function CommandDashboard() {
                                     <div className="bg-zinc-900/60 px-5 py-3 border-b border-zinc-800 flex justify-between items-center">
                                         <h3 className="font-black text-[11px] uppercase tracking-[0.2em] text-zinc-300">SEO Audit Highlights</h3>
                                         <Badge variant="outline" className={cn("text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5", activeLead.scores?.[0]?.score_overall >= 60 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-zinc-800 border-zinc-700 text-zinc-400")}>
-                                            {activeLead.scores?.[0]?.score_overall || 0}/100
+                                            {activeLead.scores?.[0]?.score_overall || 0}/{activeLead.scores?.[0]?.score_max === 100 || activeLead.seo_audits?.[0]?.pagespeed_mobile !== null ? 100 : 85}
                                         </Badge>
                                     </div>
                                     <div className="p-5 space-y-3">

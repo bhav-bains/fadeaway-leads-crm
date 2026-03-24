@@ -24,7 +24,7 @@ import { generateOutreachSuggestions } from "@/app/actions/ai";
 import { Textarea } from "@/components/ui/textarea";
 import { searchGooglePlaces, getCityAutocomplete, getAllSourcedLeads } from "@/app/actions/search";
 import { useEffect, Fragment } from "react";
-import type { EnrichmentData, ScoreBreakdown } from "@/lib/scraper";
+import type { EnrichmentData, ScoreBreakdown, ScoringRule } from "@/lib/scraper";
 
 export default function LeadFinder() {
     const [niche, setNiche] = useState("");
@@ -263,52 +263,10 @@ export default function LeadFinder() {
 
         if (data) {
             setAuditedLeads(prev => ({ ...prev, [lead.id]: data }));
-            toast.success(`Audit complete for ${lead.name}`);
-
-            if (data.companyId && lead.website) {
-                fetchAndSavePageSpeed(data.companyId, lead.website).then(res => {
-                    setAuditedLeads(prev => {
-                        const current = prev[lead.id];
-                        if (!current) return prev;
-                        const newAudit = {
-                            ...current,
-                            score: res?.newScore?.total ?? current.score,
-                            rawScrape: {
-                                ...current.rawScrape,
-                                totalScore: res?.newScore?.total ?? current.rawScrape?.totalScore,
-                                contactabilityScore: res?.newScore?.contactability ?? current.rawScrape?.contactabilityScore,
-                                seoScore: res?.newScore?.uxDecayTechnical ?? current.rawScrape?.seoScore,
-                                localIntentScore: res?.newScore?.cashFlowMaturity ?? current.rawScrape?.localIntentScore,
-                                scoreBreakdown: res?.newScore || current.rawScrape?.scoreBreakdown,
-                                seoAudit: {
-                                    ...current.rawScrape?.seoAudit,
-                                    pagespeed_mobile: res?.success ? res.pagespeed_mobile : null,
-                                    pagespeed_desktop: res?.success ? res.pagespeed_desktop : null,
-                                    mobile_load_time: res?.success ? res.mobile_load_time : null,
-                                }
-                            }
-                        };
-                        return { ...prev, [lead.id]: newAudit };
-                    });
-                }).catch(() => {
-                    setAuditedLeads(prev => {
-                        const current = prev[lead.id];
-                        if (!current) return prev;
-                        const newAudit = {
-                            ...current,
-                            rawScrape: {
-                                ...current.rawScrape,
-                                seoAudit: {
-                                    ...current.rawScrape?.seoAudit,
-                                    pagespeed_mobile: null,
-                                    pagespeed_desktop: null
-                                }
-                            }
-                        };
-                        return { ...prev, [lead.id]: newAudit };
-                    });
-                });
+            if (drawerLead?.id === lead.id) {
+                setDrawerLead({ ...lead, auditData: data });
             }
+            toast.success(`Audit complete for ${lead.name}`);
         } else {
             toast.error(`Audit failed: ${error}`);
         }
@@ -738,9 +696,9 @@ export default function LeadFinder() {
                                                                         <h3 className="text-[19px] font-sans font-bold tracking-tight leading-[1.2] uppercase line-clamp-2 text-zinc-100 group-hover:text-white transition-colors">
                                                                             {result.name}
                                                                         </h3>
-                                                                        <div className="flex items-center gap-2 text-zinc-400 text-[11px] font-bold uppercase tracking-[0.15em]">
+                                                                        <div className="flex items-center gap-2 text-zinc-400 text-[12px] font-bold uppercase tracking-[0.15em]">
                                                                             <div className="bg-zinc-800/50 p-1 rounded-md">
-                                                                                <MapPin className="h-3 w-3 shrink-0 text-brand/70" />
+                                                                                <MapPin className="h-3.5 w-3.5 shrink-0 text-brand/70" />
                                                                             </div>
                                                                             <span className="truncate">{result.city}</span>
                                                                         </div>
@@ -754,12 +712,12 @@ export default function LeadFinder() {
                                                                                     <span className="text-[26px] font-black text-white tracking-tighter leading-none">
                                                                                         {auditData.score !== undefined ? `${auditData.score}` : '-'}
                                                                                     </span>
-                                                                                    <span className="text-[12px] font-bold text-zinc-500 leading-[1.2]">/100</span>
+                                                                                    <span className="text-[12px] font-bold text-zinc-500 leading-[1.2]">/{auditData.max_score === 100 || auditData.rawScrape?.seoAudit?.pagespeed_mobile !== null ? 100 : 85}</span>
                                                                                 </div>
                                                                             </div>
-                                                                            <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-brand transition-colors flex items-center gap-1">
+                                                                            <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest group-hover:text-brand transition-colors flex items-center gap-1.5">
                                                                                 Send Outreach
-                                                                                <ChevronRight className="h-3 w-3 -mr-1" />
+                                                                                <ChevronRight className="h-3.5 w-3.5 -mr-1" />
                                                                             </span>
                                                                         </div>
                                                                     ) : (
@@ -845,31 +803,31 @@ export default function LeadFinder() {
                                         <div className="relative z-10 flex flex-col gap-2">
                                             <div className="flex items-center gap-2 sm:gap-3">
                                                 <span className="h-[1px] w-4 bg-brand/50"></span>
-                                                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.3em] text-brand/80">Business Intelligence</span>
+                                                <span className="text-[11px] sm:text-[12px] font-black uppercase tracking-[0.3em] text-brand/80">Business Intelligence</span>
                                             </div>
                                             <h2 className="text-2xl sm:text-3xl font-heading uppercase leading-tight pr-10">{drawerLead.name}</h2>
-                                            <div className="flex flex-wrap items-center text-zinc-500 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest gap-x-4 sm:gap-x-6 gap-y-2 sm:gap-y-3 mt-2 sm:mt-4">
-                                                <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-brand" /> {drawerLead.city}</span>
-                                                {drawerLead.niche && <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-brand" />{drawerLead.niche}</span>}
+                                            <div className="flex items-center text-zinc-400 text-[10.5px] sm:text-[11.5px] font-bold uppercase tracking-wider gap-x-2 sm:gap-x-4 mt-2 sm:mt-3 whitespace-nowrap">
+                                                <span className="flex items-center gap-2"><MapPin className="h-4 w-4 text-brand" /> {drawerLead.city}</span>
+                                                {drawerLead.niche && <span className="flex items-center gap-2"><Building2 className="h-4 w-4 text-brand" />{drawerLead.niche}</span>}
                                                 {drawerLead.website && (
-                                                    <a href={drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-zinc-400 hover:text-brand transition-colors cursor-pointer group">
-                                                        <Globe className="h-3.5 w-3.5 text-brand group-hover:scale-110 transition-transform" />
+                                                    <a href={drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-zinc-300 hover:text-brand transition-colors cursor-pointer group">
+                                                        <Globe className="h-4 w-4 text-brand group-hover:scale-110 transition-transform" />
                                                         <span className="border-b border-transparent group-hover:border-brand/50 lowercase tracking-normal">{drawerLead.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</span>
                                                     </a>
                                                 )}
-                                                <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 sm:border-l border-zinc-800 sm:pl-8 sm:ml-2">
+                                                <div className="flex items-center gap-3 sm:gap-4 sm:border-l border-zinc-800 sm:pl-4 sm:ml-1 shrink-0">
                                                     <div className="flex items-baseline gap-2 py-1 group/rating">
                                                         <Star className="h-4 w-4 text-brand fill-brand shrink-0" />
-                                                        <span className="text-xl sm:text-xl font-black text-brand italic tracking-tighter leading-none">{drawerLead.rating}</span>
-                                                        <span className="text-[9px] sm:text-[10px] text-zinc-500 font-bold uppercase tracking-[0.1em] leading-none">({drawerLead.ratingCount} reviews)</span>
+                                                        <span className="text-xl sm:text-2xl font-black text-brand italic tracking-tighter leading-none">{drawerLead.rating}</span>
+                                                        <span className="text-[11px] sm:text-[12px] text-zinc-500 font-bold uppercase tracking-widest leading-none">({drawerLead.ratingCount} reviews)</span>
                                                     </div>
 
-                                                    <div className="flex items-center gap-2 sm:gap-3 py-1 sm:ml-2 border-l border-zinc-800/50 pl-4 sm:pl-8 group/score">
-                                                        <Activity className="h-4 w-4 text-emerald-400 shrink-0" />
-                                                        <div className="flex items-baseline gap-1 sm:gap-1.5">
-                                                            <span className="text-[8px] sm:text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em] leading-none">SCORE:</span>
-                                                            <span className="text-lg sm:text-xl font-black text-white italic tracking-tighter leading-none">
-                                                                {audit?.rawScrape?.scoreBreakdown ? audit.rawScrape.scoreBreakdown.total : audit?.score}/100
+                                                    <div className="flex items-center gap-3 py-1 sm:ml-2 border-l border-zinc-800/50 pl-4 sm:pl-8 group/score">
+                                                        <Activity className="h-5 w-5 text-emerald-400 shrink-0" />
+                                                        <div className="flex items-baseline gap-2">
+                                                            <span className="text-[10px] sm:text-[11px] font-black text-zinc-500 uppercase tracking-[0.2em] leading-none">SCORE:</span>
+                                                            <span className="text-xl sm:text-2xl font-black text-white italic tracking-tighter leading-none">
+                                                                {audit?.rawScrape?.scoreBreakdown ? audit.rawScrape.scoreBreakdown.total : audit?.score}/{audit?.rawScrape?.scoreBreakdown?.maxTotal || audit?.max_score || (audit?.rawScrape?.seoAudit?.pagespeed_mobile !== null ? 100 : 85)}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -881,22 +839,22 @@ export default function LeadFinder() {
                                     {/* Tabs Navigation */}
                                     <div className="px-4 sm:px-6 py-3 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center shrink-0 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                                         <TabsList className="bg-zinc-900 border border-zinc-800 h-10 p-1 shrink-0 flex-nowrap min-w-max">
-                                            <TabsTrigger value="intel" className="px-6 py-1.5 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
-                                                <div className="flex items-center gap-2">
-                                                    <Globe className="h-3.5 w-3.5" />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">Business Intel</span>
+                                            <TabsTrigger value="intel" className="px-8 py-2 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
+                                                <div className="flex items-center gap-3">
+                                                    <Globe className="h-4 w-4" />
+                                                    <span className="text-[12px] font-black uppercase tracking-[0.15em]">Business Intel</span>
                                                 </div>
                                             </TabsTrigger>
-                                            <TabsTrigger value="audit" className="px-6 py-1.5 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
-                                                <div className="flex items-center gap-2">
-                                                    <Activity className="h-3.5 w-3.5" />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">Audit Breakdown</span>
+                                            <TabsTrigger value="audit" className="px-8 py-2 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
+                                                <div className="flex items-center gap-3">
+                                                    <Activity className="h-4 w-4" />
+                                                    <span className="text-[12px] font-black uppercase tracking-[0.15em]">Audit Breakdown</span>
                                                 </div>
                                             </TabsTrigger>
-                                            <TabsTrigger value="outreach" className="px-6 py-1.5 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
-                                                <div className="flex items-center gap-2">
-                                                    <Send className="h-3.5 w-3.5" />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest">AI Outreach</span>
+                                            <TabsTrigger value="outreach" className="px-8 py-2 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
+                                                <div className="flex items-center gap-3">
+                                                    <Send className="h-4 w-4" />
+                                                    <span className="text-[12px] font-black uppercase tracking-[0.15em]">AI Outreach</span>
                                                 </div>
                                             </TabsTrigger>
                                         </TabsList>
@@ -1241,36 +1199,39 @@ export default function LeadFinder() {
                                                 <>
                                                     {/* AI Score Full Width */}
                                                     {audit?.rawScrape?.scoreBreakdown && (() => {
-                                                        const sb: ScoreBreakdown = audit.rawScrape.scoreBreakdown;
-                                                        const categories = [
-                                                            { 
-                                                                label: 'UX Decay & Tech', 
-                                                                score: sb.uxDecayTechnical, 
-                                                                max: 45, 
-                                                                from: 'from-rose-400', 
-                                                                to: 'to-rose-500', 
-                                                                icon: <Activity className="h-3 w-3" />,
-                                                                rules: sb.uxRules || [] 
-                                                            },
-                                                            { 
-                                                                label: 'Maturity & Cash', 
-                                                                score: sb.cashFlowMaturity, 
-                                                                max: 30, 
-                                                                from: 'from-blue-400', 
-                                                                to: 'to-indigo-500', 
-                                                                icon: <Briefcase className="h-3 w-3" />,
-                                                                rules: sb.maturityRules || [] 
-                                                            },
-                                                            { 
-                                                                label: 'Contact Access', 
-                                                                score: sb.contactability, 
-                                                                max: 25, 
-                                                                from: 'from-emerald-400', 
-                                                                to: 'to-teal-500', 
-                                                                icon: <Phone className="h-3 w-3" />,
-                                                                rules: sb.contactRules || [] 
-                                                            },
-                                                        ];
+                                                        const sb: ScoreBreakdown = audit.rawScrape?.scoreBreakdown;
+                                                            const categories = [
+                                                                {
+                                                                    label: 'UX Decay & Tech',
+                                                                    score: sb.uxDecayTechnical,
+                                                                    max: sb.uxMax || 30,
+                                                                    from: 'from-rose-500',
+                                                                    to: 'to-orange-500',
+                                                                    icon: <Activity className="h-4 w-4" />,
+                                                                    rules: (sb.uxRules || []) as ScoringRule[],
+                                                                    type: 'decay'
+                                                                },
+                                                                {
+                                                                    label: 'Maturity & Cash',
+                                                                    score: sb.cashFlowMaturity,
+                                                                    max: 30,
+                                                                    from: 'from-blue-500',
+                                                                    to: 'to-cyan-500',
+                                                                    icon: <TrendingUp className="h-4 w-4" />,
+                                                                    rules: (sb.maturityRules || []) as ScoringRule[],
+                                                                    type: 'growth'
+                                                                },
+                                                                {
+                                                                    label: 'Contact Access',
+                                                                    score: sb.contactability,
+                                                                    max: 25,
+                                                                    from: 'from-emerald-500',
+                                                                    to: 'to-teal-500',
+                                                                    icon: <Phone className="h-4 w-4" />,
+                                                                    rules: (sb.contactRules || []) as ScoringRule[],
+                                                                    type: 'access'
+                                                                },
+                                                            ];
                                                         return (
                                                             <div className="space-y-4">
                                                                 <div className="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800 shadow-xl overflow-hidden relative group">
@@ -1291,7 +1252,7 @@ export default function LeadFinder() {
                                                                                     <RefreshCw className={cn("h-3 w-3", isAuditing[drawerLead.id] && "animate-spin")} />
                                                                                 </Button>
                                                                                 <span className="bg-zinc-950 text-brand text-sm px-4 py-1.5 rounded-lg font-black border border-brand/20 shadow-[0_0_15px_rgba(255,102,0,0.1)]">
-                                                                                    {sb.total}/100
+                                                                                    {sb.total}/{sb.maxTotal || 85}
                                                                                 </span>
                                                                             </div>
                                                                         </div>
@@ -1306,9 +1267,9 @@ export default function LeadFinder() {
                                                                                                     {cat.icon}
                                                                                                 </div>
                                                                                             </div>
-                                                                                            <span className="text-xs font-black text-zinc-400 uppercase tracking-widest leading-none">{cat.label}</span>
+                                                                                            <span className="text-[13px] font-black text-zinc-400 uppercase tracking-widest leading-none">{cat.label}</span>
                                                                                         </div>
-                                                                                        <span className="font-black text-white text-lg tracking-tighter italic">{cat.score || 0}<span className="text-zinc-600 text-xs font-bold not-italic ml-0.5">/{cat.max}</span></span>
+                                                                                        <span className="font-black text-white text-xl tracking-tighter italic">{cat.score || 0}<span className="text-zinc-600 text-[13px] font-bold not-italic ml-0.5">/{cat.max}</span></span>
                                                                                     </div>
 
                                                                                     <div className="h-1.5 bg-zinc-900 rounded-full w-full overflow-hidden">
@@ -1318,21 +1279,38 @@ export default function LeadFinder() {
                                                                                         />
                                                                                     </div>
 
-                                                                                    {/* Category Rules */}
                                                                                     <div className="space-y-2">
-                                                                                        {cat.rules.length > 0 ? (
-                                                                                            cat.rules.map((rule, idx) => (
-                                                                                                <div key={idx} className="flex items-start gap-3 text-xs text-zinc-300 bg-zinc-900/60 p-3 rounded-xl border border-zinc-800/50 group/rule transition-colors hover:border-zinc-700">
-                                                                                                    <AlertCircle className="h-4 w-4 mt-0.5 text-rose-500/80 shrink-0" />
-                                                                                                    <span className="leading-snug font-medium">{rule}</span>
+                                                                                        {cat.rules.map((rule, idx) => {
+                                                                                            // Category 1: isTriggered = BAD (Fail)
+                                                                                            // Categories 2/3: isTriggered = GOOD (Pass)
+                                                                                            const isSuccess = cat.type === 'decay' ? !rule.isTriggered : rule.isTriggered;
+                                                                                            
+                                                                                            return (
+                                                                                                <div key={idx} className={cn(
+                                                                                                    "flex items-start gap-3 text-xs p-3 rounded-xl border transition-colors group/rule",
+                                                                                                    isSuccess 
+                                                                                                        ? "text-emerald-100 bg-emerald-500/5 border-emerald-500/10 hover:border-emerald-500/30" 
+                                                                                                        : "text-rose-100 bg-rose-500/5 border-rose-500/10 hover:border-rose-500/30"
+                                                                                                )}>
+                                                                                                    {isSuccess ? (
+                                                                                                        <CheckSquare className="h-3.5 w-3.5 mt-0.5 text-emerald-500 shrink-0" />
+                                                                                                    ) : (
+                                                                                                        <AlertCircle className="h-3.5 w-3.5 mt-0.5 text-rose-500 shrink-0" />
+                                                                                                    )}
+                                                                                                    <div className="flex flex-col gap-0.5">
+                                                                                                        <span className="leading-snug font-bold">{rule.label}</span>
+                                                                                                        {rule.points > 0 && (
+                                                                                                            <span className={cn(
+                                                                                                                "text-[9px] font-black uppercase tracking-widest",
+                                                                                                                isSuccess ? "text-emerald-500/80" : "text-rose-500/80"
+                                                                                                            )}>
+                                                                                                                +{rule.points} {cat.type === 'decay' ? 'pts penalty' : 'pts reward'}
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </div>
                                                                                                 </div>
-                                                                                            ))
-                                                                                        ) : (
-                                                                                            <div className="flex items-center gap-3 text-xs text-emerald-400 bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10">
-                                                                                                <CheckSquare className="h-4 w-4 shrink-0" />
-                                                                                                <span className="font-black uppercase tracking-widest">Optimized & Clean</span>
-                                                                                            </div>
-                                                                                        )}
+                                                                                            );
+                                                                                        })}
                                                                                     </div>
                                                                                 </div>
                                                                             ))}
@@ -1344,9 +1322,9 @@ export default function LeadFinder() {
                                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                                     {/* Mobile Score */}
                                                                     <div className="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800 p-4 flex items-center justify-between group/speed hover:border-zinc-700 transition-colors">
-                                                                        <div className="flex items-center gap-3">
-                                                                            <Smartphone className="h-4 w-4 text-brand" />
-                                                                            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Mobile Speed</span>
+                                                                        <div className="flex items-center gap-4">
+                                                                            <Smartphone className="h-5 w-5 text-brand" />
+                                                                            <span className="text-[12px] font-black uppercase tracking-widest text-zinc-500">Mobile Speed</span>
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
                                                                             {isAuditing[drawerLead.id] && (
@@ -1503,9 +1481,13 @@ export default function LeadFinder() {
                                                                     niche: drawerLead.niche,
                                                                     website: drawerLead.website,
                                                                     score: audit?.score,
+                                                                    maxScore: audit?.max_score || 85,
                                                                     seoScore: audit?.rawScrape?.scoreBreakdown?.uxDecayTechnical,
+                                                                    uxMax: audit?.rawScrape?.scoreBreakdown?.uxMax || 30,
                                                                     localIntentScore: audit?.rawScrape?.scoreBreakdown?.cashFlowMaturity,
+                                                                    maturityMax: audit?.rawScrape?.scoreBreakdown?.maturityMax || 30,
                                                                     contactabilityScore: audit?.rawScrape?.scoreBreakdown?.contactability,
+                                                                    contactMax: audit?.rawScrape?.scoreBreakdown?.contactMax || 25,
                                                                     biggestWeakness: audit?.biggestWeakness,
                                                                     manualNotes: manualNotes || drawerLead.manual_notes,
                                                                     rawAudit: audit?.rawScrape

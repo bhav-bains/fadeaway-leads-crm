@@ -1,5 +1,7 @@
 'use server';
 
+import { scrapeWebsite, calculateLeadScore } from "@/lib/scraper";
+import { EnrichmentData } from "@/lib/scraper";
 import { createClient } from '@/lib/supabase/server';
 import { normalizeQueryKey } from '@/lib/utils';
 
@@ -15,25 +17,11 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
     const { data: auditedCompanies } = await supabase
         .from('companies')
         .select(`
-            id,
-            source_id,
-            website,
-            city,
-            status,
-            manual_notes,
-            ig_followers,
-            ig_activity,
-            rating_count,
-            scores!left (score_overall, score_contactability, score_seo, score_local_intent, score_fit),
-            seo_audits!left (
-                has_title, title_len, has_h1, has_booking_link, schema_org_types, top_keywords_found, 
-                pagespeed_mobile, pagespeed_desktop, mobile_load_time, h1_count, 
-                has_meta_description, has_og_image, uses_cheap_builder, revenue_pages_count, 
-                is_single_page, has_cta_keywords, has_review_widget, has_meta_pixel, 
-                has_google_ads_tag, has_expansion_keywords, has_contact_form
-            ),
-            contacts!left (email, type),
-            socials!left (platform, url)
+            *,
+            scores!left(*),
+            seo_audits!left(*),
+            contacts!left(*),
+            socials!left(*)
         `)
         .eq('workspace_id', workspaceId)
         .in('source_id', sourceIds);
@@ -51,7 +39,11 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
                 matchingLead.manual_notes = company.manual_notes;
                 matchingLead.ig_followers = company.ig_followers;
                 matchingLead.ig_activity = company.ig_activity;
+                matchingLead.win_probability = company.win_probability;
+                matchingLead.instagram_url = company.instagram_url;
+                matchingLead.phone = company.phone || matchingLead.phone;
                 matchingLead.companyId = company.id;
+                if (company.rating_count) matchingLead.ratingCount = company.rating_count;
 
                 if (company.scores && company.scores.length > 0) {
                     const score = company.scores[0];
@@ -67,50 +59,15 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
                     }
 
                     // Reconstruct a compatible ScrapeResult-like object for the frontend
-                    auditedLeadsMap[matchingLead.id] = {
-                        companyId: company.id,
-                        score: score.score_overall,
-                        email: company.contacts?.[0]?.email || '',
-                        biggestWeakness: reconstructedWeakness, 
-                        bookingDetected: audit?.has_booking_link || false,
-                        rawScrape: {
-                            totalScore: score.score_overall,
-                            contactabilityScore: score.score_contactability,
-                            seoScore: score.score_seo,
-                            localIntentScore: score.score_local_intent,
-                            fitScore: score.score_fit,
-                            emails: company.contacts || [],
-                            socials: company.socials || [],
-                            scoreBreakdown: {
-                                total: score.score_overall,
-                                uxDecayTechnical: score.score_seo || 0,
-                                cashFlowMaturity: score.score_local_intent || 0,
-                                contactability: score.score_contactability || 0,
-                                rulesTriggered: []
-                            },
-                            seoAudit: {
-                                has_title: audit?.has_title || false,
-                                title_len: audit?.title_len || 0,
-                                has_h1: audit?.has_h1 || false,
-                                has_booking_link: audit?.has_booking_link || false,
-                                has_schema: (audit?.schema_org_types?.length || 0) > 0,
-                                pagespeed_mobile: audit?.pagespeed_mobile ?? null,
-                                pagespeed_desktop: audit?.pagespeed_desktop ?? null,
-                                mobile_load_time: audit?.mobile_load_time ?? null,
-                                h1_count: audit?.h1_count ?? (audit?.has_h1 ? 1 : 0),
-                                has_meta_description: audit?.has_meta_description ?? false,
-                                has_og_image: audit?.has_og_image ?? false,
-                                uses_cheap_builder: audit?.uses_cheap_builder ?? false,
-                                revenue_pages_count: audit?.revenue_pages_count ?? 0,
-                                is_single_page: audit?.is_single_page ?? false,
-                                has_cta_keywords: audit?.has_cta_keywords ?? false,
-                                has_review_widget: audit?.has_review_widget ?? false,
-                                has_meta_pixel: audit?.has_meta_pixel ?? false,
-                                has_google_ads_tag: audit?.has_google_ads_tag ?? false,
-                                has_expansion_keywords: audit?.has_expansion_keywords ?? false,
-                                has_contact_form: audit?.has_contact_form ?? false,
-                            },
-                            enrichment: {
+                            const googleData = {
+                                url: matchingLead.website || '',
+                                reviewCount: matchingLead.ratingCount || 0,
+                                reviewAvg: 0,
+                                mobilePerformance: audit?.pagespeed_mobile,
+                                desktopPerformance: audit?.pagespeed_desktop
+                            };
+
+                            const reconstructedEnrichment: any = {
                                 contacts: {
                                     emails: company.contacts || [],
                                     hasContactForm: audit?.has_contact_form ?? false,
@@ -140,16 +97,59 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
                                 ctas: {
                                     hasGeneralCTA: audit?.has_cta_keywords ?? false,
                                     hasReviewWidget: audit?.has_review_widget ?? false,
-                                    bookingUrls: []
+                                    bookingUrls: audit?.has_booking_link ? [{ platform: 'detected', url: '#' }] : []
                                 },
                                 socials: {
                                     facebook: company.socials?.find((s: any) => s.platform === 'facebook'),
                                     instagram: company.socials?.find((s: any) => s.platform === 'instagram'),
                                     tiktok: company.socials?.find((s: any) => s.platform === 'tiktok'),
                                 }
-                            }
-                        }
-                    };
+                            };
+
+                            const scoreBreakdown = calculateLeadScore(reconstructedEnrichment as EnrichmentData, googleData);
+                            
+                            matchingLead.score = scoreBreakdown.total; // Sync Card with Modal
+                            auditedLeadsMap[matchingLead.id] = {
+                                companyId: company.id,
+                                score: scoreBreakdown.total,
+                                max_score: scoreBreakdown.maxTotal,
+                                email: company.contacts?.[0]?.email || '',
+                                biggestWeakness: reconstructedWeakness, 
+                                bookingDetected: audit?.has_booking_link || false,
+                                rawScrape: {
+                                    totalScore: scoreBreakdown.total,
+                                    contactabilityScore: score.score_contactability,
+                                    seoScore: score.score_seo,
+                                    localIntentScore: score.score_local_intent,
+                                    fitScore: score.score_fit,
+                                    emails: company.contacts || [],
+                                    socials: company.socials || [],
+                                    scoreBreakdown: scoreBreakdown,
+                                    seoAudit: {
+                                        has_title: audit?.has_title || false,
+                                        title_len: audit?.title_len || 0,
+                                        has_h1: audit?.has_h1 || false,
+                                        has_booking_link: audit?.has_booking_link || false,
+                                        has_schema: (audit?.schema_org_types?.length || 0) > 0,
+                                        pagespeed_mobile: audit?.pagespeed_mobile ?? null,
+                                        pagespeed_desktop: audit?.pagespeed_desktop ?? null,
+                                        mobile_load_time: audit?.mobile_load_time ?? null,
+                                        h1_count: audit?.h1_count ?? (audit?.has_h1 ? 1 : 0),
+                                        has_meta_description: audit?.has_meta_description ?? false,
+                                        has_og_image: audit?.has_og_image ?? false,
+                                        uses_cheap_builder: audit?.uses_cheap_builder ?? false,
+                                        revenue_pages_count: audit?.revenue_pages_count ?? 0,
+                                        is_single_page: audit?.is_single_page ?? false,
+                                        has_cta_keywords: audit?.has_cta_keywords ?? false,
+                                        has_review_widget: audit?.has_review_widget ?? false,
+                                        has_meta_pixel: audit?.has_meta_pixel ?? false,
+                                        has_google_ads_tag: audit?.has_google_ads_tag ?? false,
+                                        has_expansion_keywords: audit?.has_expansion_keywords ?? false,
+                                        has_contact_form: audit?.has_contact_form ?? false,
+                                    },
+                                    enrichment: reconstructedEnrichment
+                                }
+                            };
                 }
             }
         }
