@@ -49,15 +49,6 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
                     const score = company.scores[0];
                     const audit = company.seo_audits?.[0];
                     
-                    let reconstructedWeakness = 'Solid Digital Presence';
-                    if (audit) {
-                        if (!audit.has_title) reconstructedWeakness = '🔴 Empty Title Tag';
-                        else if (!audit.has_h1) reconstructedWeakness = '🔴 Missing H1 Tag';
-                        else if (!audit.has_booking_link) reconstructedWeakness = '🔴 No Booking Link';
-                    } else if (score.score_overall > 0) {
-                        reconstructedWeakness = 'Audit Complete';
-                    }
-
                     // Reconstruct a compatible ScrapeResult-like object for the frontend
                             const googleData = {
                                 url: matchingLead.website || '',
@@ -108,6 +99,11 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
 
                             const scoreBreakdown = calculateLeadScore(reconstructedEnrichment as EnrichmentData, googleData);
                             
+                            // Derive biggest weakness from the live scoring engine (same as fresh audit)
+                            const reconstructedWeakness = scoreBreakdown.rulesTriggered.length > 0
+                                ? `🔴 ${scoreBreakdown.rulesTriggered[0]}`
+                                : 'Solid Digital Presence';
+
                             matchingLead.score = scoreBreakdown.total; // Sync Card with Modal
                             auditedLeadsMap[matchingLead.id] = {
                                 companyId: company.id,
@@ -118,10 +114,10 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
                                 bookingDetected: audit?.has_booking_link || false,
                                 rawScrape: {
                                     totalScore: scoreBreakdown.total,
-                                    contactabilityScore: score.score_contactability,
-                                    seoScore: score.score_seo,
-                                    localIntentScore: score.score_local_intent,
-                                    fitScore: score.score_fit,
+                                    contactabilityScore: scoreBreakdown.contactability,
+                                    seoScore: scoreBreakdown.uxDecayTechnical,
+                                    localIntentScore: scoreBreakdown.cashFlowMaturity,
+                                    fitScore: 0,
                                     emails: company.contacts || [],
                                     socials: company.socials || [],
                                     scoreBreakdown: scoreBreakdown,

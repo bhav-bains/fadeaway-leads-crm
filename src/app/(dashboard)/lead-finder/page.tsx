@@ -1459,17 +1459,108 @@ export default function LeadFinder() {
                                                             </div>
                                                         </TabsContent>
                                                     </Tabs>
+
+                                                    {/* Debug Accordion */}
+                                                    {aiSuggestions?._debug && (
+                                                        <details className="rounded-xl border border-zinc-800 bg-zinc-900/30 overflow-hidden group">
+                                                            <summary className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-300 flex items-center gap-2 transition-colors list-none">
+                                                                <span className="text-zinc-600 group-open:text-brand transition-colors">▶</span>
+                                                                🔬 AI Debug — Prompt Sent to Gemini
+                                                            </summary>
+                                                            <div className="border-t border-zinc-800 p-4">
+                                                                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-2">📝 Full Prompt Sent to Gemini</p>
+                                                                <pre className="text-[11px] text-zinc-300 whitespace-pre-wrap leading-relaxed font-mono bg-zinc-950 rounded-lg p-3 overflow-x-auto max-h-[400px] overflow-y-auto">{aiSuggestions._debug.prompt}</pre>
+                                                            </div>
+                                                        </details>
+                                                    )}
                                                 </div>
                                             ) : (
-                                                <div className="flex flex-col items-center justify-center p-12 rounded-3xl border border-zinc-800 border-dashed bg-zinc-900/20 text-zinc-500 gap-6 transition-all duration-300">
-                                                    <div className="h-20 w-20 bg-zinc-900 rounded-3xl flex items-center justify-center border border-zinc-800 shadow-2xl relative group/icon">
-                                                        <div className="absolute inset-0 bg-brand/5 rounded-3xl blur-xl group-hover/icon:bg-brand/10 transition-colors"></div>
-                                                        <Wand2 className="h-8 w-8 text-zinc-700 group-hover/icon:text-brand transition-colors relative z-10" />
+                                                <div className="flex flex-col p-4 gap-4">
+                                                    {/* Data Preview Panel */}
+                                                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+                                                        <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900">
+                                                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">📊 Data Being Sent to AI</span>
+                                                        </div>
+                                                        {/* Business Identity Row */}
+                                                        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/40 flex flex-col gap-0.5">
+                                                            <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Business</p>
+                                                            <p className="text-[13px] font-black text-zinc-100">{drawerLead.name}</p>
+                                                            <p className="text-[10px] text-zinc-500 font-bold">{drawerLead.niche || 'Local Business'} &bull; <span className="text-brand/80">{drawerLead.website || 'No website'}</span></p>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-0 divide-x divide-zinc-800">
+                                                            {/* Left column */}
+                                                            <div className="flex flex-col gap-0 divide-y divide-zinc-800/60">
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Overall Score</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.score ?? '—'}<span className="text-zinc-500 text-[10px]">/{audit?.max_score || 85}</span></p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">UX Decay & Tech</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.rawScrape?.scoreBreakdown?.uxDecayTechnical ?? '—'}<span className="text-zinc-500 text-[10px]">/{audit?.rawScrape?.scoreBreakdown?.uxMax || 30}</span></p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Maturity & Cash</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.rawScrape?.scoreBreakdown?.cashFlowMaturity ?? '—'}<span className="text-zinc-500 text-[10px]">/{audit?.rawScrape?.scoreBreakdown?.maturityMax || 30}</span></p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Contact Access</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.rawScrape?.scoreBreakdown?.contactability ?? '—'}<span className="text-zinc-500 text-[10px]">/{audit?.rawScrape?.scoreBreakdown?.contactMax || 25}</span></p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">PageSpeed Mobile</p>
+                                                                    <p className={`text-[13px] font-black ${(audit?.rawScrape?.seoAudit?.pagespeed_mobile ?? 100) < 50 ? 'text-red-400' : (audit?.rawScrape?.seoAudit?.pagespeed_mobile ?? 100) < 80 ? 'text-orange-400' : 'text-green-400'}`}>{audit?.rawScrape?.seoAudit?.pagespeed_mobile ?? 'N/A'}<span className="text-zinc-500 text-[10px]">/100</span></p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">PageSpeed Desktop</p>
+                                                                    <p className={`text-[13px] font-black ${(audit?.rawScrape?.seoAudit?.pagespeed_desktop ?? 100) < 50 ? 'text-red-400' : (audit?.rawScrape?.seoAudit?.pagespeed_desktop ?? 100) < 80 ? 'text-orange-400' : 'text-green-400'}`}>{audit?.rawScrape?.seoAudit?.pagespeed_desktop ?? 'N/A'}<span className="text-zinc-500 text-[10px]">/100</span></p>
+                                                                </div>
+                                                            </div>
+                                                            {/* Right column */}
+                                                            <div className="flex flex-col gap-0 divide-y divide-zinc-800/60">
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Google Rating</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">⭐ {drawerLead.rating ?? '—'}<span className="text-zinc-500 text-[10px]"> ({drawerLead.ratingCount ?? 0} reviews)</span></p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Win Probability</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">{drawerLead.win_probability ?? <span className="text-zinc-600">Not set</span>}</p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">IG Followers</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">{drawerLead.ig_followers ?? <span className="text-zinc-600">Not tracked</span>}</p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">IG Activity</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">{drawerLead.ig_activity ?? <span className="text-zinc-600">Not tracked</span>}</p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Load Time</p>
+                                                                    <p className="text-[13px] font-black text-zinc-100">{audit?.rawScrape?.seoAudit?.mobile_load_time ?? 'N/A'}</p>
+                                                                </div>
+                                                                <div className="px-3 py-2">
+                                                                    <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Manual Notes</p>
+                                                                    <p className="text-[12px] font-bold text-zinc-300 truncate">{drawerLead.manual_notes || <span className="text-zinc-600">None</span>}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {/* Biggest Weakness */}
+                                                        {audit?.biggestWeakness && (
+                                                            <div className="px-4 py-2.5 border-t border-zinc-800 bg-zinc-950/50">
+                                                                <p className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-1">🎯 Top Priority Issue <span className="text-zinc-600 normal-case">(auto-selected by scoring engine)</span></p>
+                                                                <p className="text-[11px] font-bold text-orange-400">{audit.biggestWeakness}</p>
+                                                            </div>
+                                                        )}
+                                                        {/* Rules count chips */}
+                                                        <div className="px-4 py-2.5 border-t border-zinc-800 flex gap-2 flex-wrap">
+                                                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-zinc-800 text-zinc-400">{audit?.rawScrape?.scoreBreakdown?.uxRules?.filter((r: any) => r.isTriggered).length ?? 0} UX Issues</span>
+                                                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-zinc-800 text-zinc-400">{audit?.rawScrape?.scoreBreakdown?.maturityRules?.filter((r: any) => r.isTriggered).length ?? 0} Maturity Signals</span>
+                                                            <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-zinc-800 text-zinc-400">{audit?.rawScrape?.scoreBreakdown?.contactRules?.filter((r: any) => r.isTriggered).length ?? 0} Contact Signals</span>
+                                                        </div>
                                                     </div>
                                                     <div className="text-center space-y-2">
                                                         <h3 className="text-sm font-black text-zinc-300 uppercase tracking-[0.3em]">AI Outreach Pitch</h3>
-                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 max-w-[280px] leading-relaxed mx-auto">
-                                                            Generate a tailored email sequence for {drawerLead.name} based on audit data.
+                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 leading-relaxed mx-auto">
+                                                            Generate a tailored email sequence for {drawerLead.name} based on the data above.
                                                         </p>
                                                     </div>
                                                     <Button
@@ -1490,7 +1581,21 @@ export default function LeadFinder() {
                                                                     contactMax: audit?.rawScrape?.scoreBreakdown?.contactMax || 25,
                                                                     biggestWeakness: audit?.biggestWeakness,
                                                                     manualNotes: manualNotes || drawerLead.manual_notes,
-                                                                    rawAudit: audit?.rawScrape
+                                                                    rating: drawerLead.rating,
+                                                                    ratingCount: drawerLead.ratingCount,
+                                                                    winProbability: drawerLead.win_probability,
+                                                                    igFollowers: drawerLead.ig_followers,
+                                                                    igActivity: drawerLead.ig_activity,
+                                                                    pagespeedMobile: audit?.rawScrape?.seoAudit?.pagespeed_mobile,
+                                                                    pagespeedDesktop: audit?.rawScrape?.seoAudit?.pagespeed_desktop,
+                                                                    mobileLoadTime: audit?.rawScrape?.seoAudit?.mobile_load_time,
+                                                                    rawAudit: audit?.rawScrape,
+                                                                    scoringRules: {
+                                                                        uxRules: audit?.rawScrape?.scoreBreakdown?.uxRules || [],
+                                                                        maturityRules: audit?.rawScrape?.scoreBreakdown?.maturityRules || [],
+                                                                        contactRules: audit?.rawScrape?.scoreBreakdown?.contactRules || [],
+                                                                        rulesTriggered: audit?.rawScrape?.scoreBreakdown?.rulesTriggered || [],
+                                                                    }
                                                                 });
                                                                 if (res.error) throw new Error(res.error);
                                                                 setAiSuggestions(res.data);
@@ -1573,7 +1678,6 @@ export default function LeadFinder() {
                                                             onClick={async () => {
                                                                 navigator.clipboard.writeText(aiSuggestions.dmBody);
                                                                 toast.success("DM copied to clipboard!");
-                                                                setAiSuggestions(null);
                                                             }}
                                                         >
                                                             <Download className="h-4 w-4 mr-2" /> Copy DM

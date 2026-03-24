@@ -14,68 +14,86 @@ export async function generateOutreachSuggestions(leadData: any) {
     try {
         const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
 
-        // Stringify the raw audit for the LLM to inspect directly
-        const rawAuditString = JSON.stringify(leadData.rawAudit || {}, null, 2);
+        // Format scoring rules into human-readable bullet points
+        const formatRules = (rules: any[]) => rules
+            .filter((r: any) => r.isTriggered)
+            .map((r: any) => `  - ${r.label}: ${r.points > 0 ? `${r.points} pts` : 'OK'}`)
+            .join('\n') || '  - None detected';
 
-        // STEP 1: Generate a Hormozi-style strategy prompt
-        const strategyPrompt = `
-You are a world-class sales strategist specialized in Alex Hormozi's "$100M Offers" and "Lead Generation" frameworks. 
-I have a lead for a ${leadData.niche || 'local business'} called "${leadData.name || 'this company'}".
+        const uxRulesStr = formatRules(leadData.scoringRules?.uxRules || []);
+        const maturityRulesStr = formatRules(leadData.scoringRules?.maturityRules || []);
+        const contactRulesStr = formatRules(leadData.scoringRules?.contactRules || []);
 
-Business Data Summary:
-- Website: ${leadData.website || 'None'}
-- Audit Score: ${leadData.score || 0}/${leadData.maxScore || 85} (Overall)
-- UX/SEO Score: ${leadData.seoScore || 0}/${leadData.uxMax || 30} (Category: Technical/SEO)
-- Local Trust Score: ${leadData.localIntentScore || 0}/${leadData.maturityMax || 30} (Category: Reviews/Maps)
-- Contactability: ${leadData.contactabilityScore || 0}/${leadData.contactMax || 25} (Category: Inbox/Form access)
-- Biggest Weakness: ${leadData.biggestWeakness || 'None'}
-- Manual Notes: ${leadData.manualNotes || 'None'}.
+        // Single comprehensive prompt combining strategy + output generation
+        const prompt = `
+You are a world-class sales closer trained in Alex Hormozi's "$100M Offers" and "$100M Leads" frameworks.
 
-DETAILED AUDIT DATA (Raw JSON):
-${rawAuditString}
+Your job is to write a high-converting cold outreach pitch for a digital marketing agency targeting LOCAL SPORTS & FITNESS businesses.
 
-Your task:
-1. Analyze the RAW AUDIT DATA to find specific "gold nuggets" or "fatal flaws" to mention.
-2. Generate a HIGHLY OPTIMIZED PROMPT for another AI. 
-   This prompt should instruct the AI to write a cold email and DM using Hormozi's "Value First" approach.
-Focus on:
-1. Identifying a "High-Value Problem" we can solve for "${leadData.name}" based on your evaluation.
-2. Building a "Grand Slam Offer" (high value, low friction).
-3. Using the specific audit results as a "Reason why" we are reaching out.
-
-Return ONLY the optimized instructions (prompt) that I should give the next AI. Do not include any other text.
-`;
-
-        const strategyResult = await model.generateContent(strategyPrompt);
-        const customPrompt = strategyResult.response.text();
-
-        // STEP 2: Execute the custom-built prompt
-        const finalPrompt = `
-${customPrompt}
-
-Lead Context:
-Name: ${leadData.name || 'Unknown'}
+=== LEAD PROFILE ===
+Business: ${leadData.name || 'Unknown'}
+Niche: ${leadData.niche || 'Local Business'}
 Website: ${leadData.website || 'No website'}
-Overall Score: ${leadData.score || 'Unknown'}/${leadData.maxScore || 85}
-SEO Score: ${leadData.seoScore || 0}/${leadData.uxMax || 30}
-Trust Score: ${leadData.localIntentScore || 0}/${leadData.maturityMax || 30}
-Contactability: ${leadData.contactabilityScore || 0}/${leadData.contactMax || 25}
-Biggest Weakness: ${leadData.biggestWeakness || 'None detected'}
 
-Please return a raw JSON object (NO Markdown formatting, just valid JSON) with exactly this structure:
+=== WEBSITE AUDIT RESULTS ===
+Overall Opportunity Score: ${leadData.score || 0}/${leadData.maxScore || 85}
+Website Technical Issues Found: ${leadData.seoScore || 0} out of ${leadData.uxMax || 30} (higher = more problems we can fix)
+Business Maturity Score: ${leadData.localIntentScore || 0}/${leadData.maturityMax || 30} (higher = more budget, more established)
+Contact Access Score: ${leadData.contactabilityScore || 0}/${leadData.contactMax || 25}
+
+=== PAGESPEED PERFORMANCE ===
+Mobile: ${leadData.pagespeedMobile ?? 'Not tested'}/100
+Desktop: ${leadData.pagespeedDesktop ?? 'Not tested'}/100
+Mobile Load Time: ${leadData.mobileLoadTime || 'Unknown'}
+
+=== GOOGLE PLACES ===
+Rating: ${leadData.rating || 'Unknown'}/5.0
+Reviews: ${leadData.ratingCount || 0}
+
+=== SALES INTELLIGENCE ===
+Win Probability: ${leadData.winProbability || 'Not assessed'}
+Instagram Followers: ${leadData.igFollowers || 'Unknown'}
+Instagram Activity: ${leadData.igActivity || 'Unknown'}
+Agent Notes: ${leadData.manualNotes || 'None'}
+
+=== SPECIFIC TECHNICAL ISSUES (things we can fix and sell) ===
+${uxRulesStr}
+
+=== BUSINESS STRENGTH SIGNALS (reasons they can pay for services) ===
+${maturityRulesStr}
+
+=== CONTACT & REACHABILITY ===
+${contactRulesStr}
+
+=== YOUR TASK ===
+1. Analyze the data above. Identify the SINGLE most painful, emotionally compelling problem for THIS business owner. Do not pick generically — pick the issue that would make them stop scrolling and read.
+2. Write a cold email and Instagram DM using Hormozi's "Value First" approach:
+   - Open with proof of research (specific number from the audit)
+   - Identify their specific pain (lost bookings, lost clients, slow website etc.)
+   - Make a bold, low-friction offer
+   - One call to action only
+3. Write 3 key findings (specific issues you found) and 2 pain points (emotional consequences for the owner)
+
+RULES:
+- Use the ACTUAL business name "${leadData.name}" — never use placeholders like [Business Name]
+- Use REAL numbers from the audit (load times, scores, review counts)
+- Email must be under 100 words. DM under 50 words.
+- Subject line must be under 6 words, punchy, no clickbait
+
+Return ONLY a raw JSON object (NO markdown, no explanation, just valid JSON):
 {
-  "keyFindings": ["3 critical issues"],
-  "painPoints": ["2 emotional pain points"],
-  "subjectLine": "Short, punchy subject (under 6 words)",
-  "emailBody": "Hormozi style email (under 100 words). Value first. Direct call to action. Use the actual name '${leadData.name}' instead of variables.",
-  "dmBody": "Instagram DM (under 50 words). Low friction question at end."
+  "keyFindings": ["finding 1 with specific data", "finding 2 with specific data", "finding 3 with specific data"],
+  "painPoints": ["emotional pain point 1", "emotional pain point 2"],
+  "subjectLine": "Short punchy subject",
+  "emailBody": "Full Hormozi-style cold email under 100 words using real data and actual business name",
+  "dmBody": "Instagram DM under 50 words with a low-friction closing question"
 }
 `;
 
-        const result = await model.generateContent(finalPrompt);
+        const result = await model.generateContent(prompt);
         const responseText = result.response.text();
 
-        // Strip markdown code blocks if the model wrapped it in ```json
+        // Strip markdown code blocks if the model wrapped it
         let cleanJson = responseText.trim();
         if (cleanJson.startsWith('```json')) {
             cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
@@ -84,7 +102,7 @@ Please return a raw JSON object (NO Markdown formatting, just valid JSON) with e
         }
 
         const data = JSON.parse(cleanJson);
-        return { data };
+        return { data: { ...data, _debug: { prompt } } };
 
     } catch (e: any) {
         console.error('Failed to generate AI outreach:', e);
