@@ -705,36 +705,38 @@ export default function CommandDashboard() {
                                     </div>
                                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         {/* Mobile */}
-                                        <div className="flex items-center justify-between bg-zinc-900 px-4 py-3 rounded-xl border border-zinc-800 text-sm hover:border-brand/30 transition-colors">
-                                            <span className="font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2 text-[11px]"><Smartphone className="h-4 w-4 text-brand" /> Mobile Score</span>
+                                        <div className="flex items-center justify-between bg-zinc-900 px-4 py-3 rounded-xl border border-zinc-800 text-sm hover:border-brand/30 transition-colors group/speed">
+                                            <span className="font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2 text-[11px]"><Smartphone className="h-4 w-4 text-brand" /> Mobile Speed</span>
                                             <div className="flex items-center gap-2">
-                                                {activeLead.seo_audits?.[0]?.pagespeed_mobile !== undefined ? (
-                                                    activeLead.seo_audits[0].pagespeed_mobile !== null ? (
-                                                        <span className={cn("text-lg font-black italic", activeLead.seo_audits[0].pagespeed_mobile >= 90 ? "text-emerald-500" : activeLead.seo_audits[0].pagespeed_mobile >= 50 ? "text-amber-500" : "text-rose-500")}>
-                                                            {activeLead.seo_audits[0].pagespeed_mobile}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">N/A</span>
-                                                    )
+                                                {activeLead.seo_audits?.[0]?.pagespeed_mobile === undefined ? (
+                                                    <Loader2 className="h-3 w-3 text-zinc-700 animate-spin" />
                                                 ) : (
-                                                    <div className="h-5 w-8 bg-zinc-800 animate-pulse rounded"></div>
+                                                    <span className={cn(
+                                                        "text-lg font-black italic",
+                                                        activeLead.seo_audits[0].pagespeed_mobile >= 90 ? "text-emerald-500" : 
+                                                        activeLead.seo_audits[0].pagespeed_mobile >= 50 ? "text-amber-500" : 
+                                                        activeLead.seo_audits[0].pagespeed_mobile !== null ? "text-rose-500" : "text-zinc-700"
+                                                    )}>
+                                                        {activeLead.seo_audits[0].pagespeed_mobile !== null ? `${activeLead.seo_audits[0].pagespeed_mobile}%` : "---"}
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>
                                         {/* Desktop */}
-                                        <div className="flex items-center justify-between bg-zinc-900 px-4 py-3 rounded-xl border border-zinc-800 text-sm hover:border-brand/30 transition-colors">
+                                        <div className="flex items-center justify-between bg-zinc-900 px-4 py-3 rounded-xl border border-zinc-800 text-sm hover:border-brand/30 transition-colors group/speed">
                                             <span className="font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2 text-[11px]"><Monitor className="h-4 w-4 text-brand" /> Desktop Score</span>
                                             <div className="flex items-center gap-2">
-                                                {activeLead.seo_audits?.[0]?.pagespeed_desktop !== undefined ? (
-                                                    activeLead.seo_audits[0].pagespeed_desktop !== null ? (
-                                                        <span className={cn("text-lg font-black italic", activeLead.seo_audits[0].pagespeed_desktop >= 90 ? "text-emerald-500" : activeLead.seo_audits[0].pagespeed_desktop >= 50 ? "text-amber-500" : "text-rose-500")}>
-                                                            {activeLead.seo_audits[0].pagespeed_desktop}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">N/A</span>
-                                                    )
+                                                {activeLead.seo_audits?.[0]?.pagespeed_desktop === undefined ? (
+                                                    <Loader2 className="h-3 w-3 text-zinc-700 animate-spin" />
                                                 ) : (
-                                                    <div className="h-5 w-8 bg-zinc-800 animate-pulse rounded"></div>
+                                                    <span className={cn(
+                                                        "text-lg font-black italic",
+                                                        activeLead.seo_audits[0].pagespeed_desktop >= 90 ? "text-emerald-500" : 
+                                                        activeLead.seo_audits[0].pagespeed_desktop >= 50 ? "text-amber-500" : 
+                                                        activeLead.seo_audits[0].pagespeed_desktop !== null ? "text-rose-500" : "text-zinc-700"
+                                                    )}>
+                                                        {activeLead.seo_audits[0].pagespeed_desktop !== null ? `${activeLead.seo_audits[0].pagespeed_desktop}%` : "---"}
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>

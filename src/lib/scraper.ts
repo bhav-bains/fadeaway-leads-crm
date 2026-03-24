@@ -14,9 +14,12 @@ export interface EnrichmentData {
         h1Tags: { count: number; texts: string[] };
         titleTag: { text: string; isEmpty: boolean };
         metaDescription: { exists: boolean; content: string };
+        hasOgImage: boolean;
         hasViewport: boolean;
         hasNoIndex: boolean;
         hasSchemaMarkup: boolean;
+        revenuePagesCount: number;
+        isSinglePage: boolean;
     };
     pixels: {
         hasMetaPixel: boolean;
@@ -25,6 +28,7 @@ export interface EnrichmentData {
     expansionKeywords: string[];
     ctas: {
         hasGeneralCTA: boolean;
+        hasReviewWidget: boolean;
         bookingUrls: { platform: string; url: string }[];
     };
     socials: {
@@ -48,7 +52,11 @@ export interface ScoreBreakdown {
     uxDecayTechnical: number;   // Category 1: max 45 pts
     cashFlowMaturity: number;   // Category 2: max 30 pts
     contactability: number;     // Category 3: max 25 pts
-    rulesTriggered: string[];   // Which rules fired (for UI display)
+    rulesTriggered: string[];   // Legacy: Full list
+    // New categorized rules
+    uxRules?: string[];
+    maturityRules?: string[];
+    contactRules?: string[];
 }
 
 // ============================================================
@@ -57,9 +65,7 @@ export interface ScoreBreakdown {
 
 export interface ScrapeResult {
     url: string;
-    // New 100-point scoring
     scoreBreakdown: ScoreBreakdown;
-    // Legacy field mappings (for backward compat with scores table / enrichment-worker)
     contactabilityScore: number;
     seoScore: number;
     localIntentScore: number;
@@ -73,6 +79,20 @@ export interface ScrapeResult {
         has_h1: boolean;
         has_booking_link: boolean;
         has_schema: boolean;
+        h1_count: number;
+        has_meta_description: boolean;
+        has_og_image: boolean;
+        uses_cheap_builder: boolean;
+        revenue_pages_count: number;
+        is_single_page: boolean;
+        has_cta_keywords: boolean;
+        has_review_widget: boolean;
+        has_meta_pixel: boolean;
+        has_google_ads_tag: boolean;
+        has_expansion_keywords: boolean;
+        has_contact_form: boolean;
+        pagespeed_mobile?: number | null;
+        pagespeed_desktop?: number | null;
     };
     biggestWeakness: string;
     enrichment: EnrichmentData;
@@ -83,9 +103,7 @@ export interface ScrapeResult {
 // ============================================================
 
 const GENERIC_EMAIL_PREFIXES = ['info', 'contact', 'support', 'hello', 'admin', 'sales', 'office', 'help'];
-
 const EXPANSION_KEYWORDS = ['careers', 'locations', 'service area', 'commercial', 'corporate', 'team', 'coaches', 'programs', 'events', 'retreats'];
-
 const CTA_KEYWORDS = ['book', 'call', 'schedule', 'quote', 'buy'];
 
 const BOOKING_PLATFORMS: Record<string, string> = {
@@ -131,7 +149,6 @@ function extractContacts($: cheerio.CheerioAPI, rawHtml: string): EnrichmentData
     const seenEmails = new Set<string>();
     const emails: EnrichmentData['contacts']['emails'] = [];
 
-    // 1. Extract mailto: hrefs
     $('a[href^="mailto:"]').each((_, el) => {
         const href = $(el).attr('href') || '';
         const email = href.replace('mailto:', '').split('?')[0].toLowerCase().trim();
@@ -146,11 +163,9 @@ function extractContacts($: cheerio.CheerioAPI, rawHtml: string): EnrichmentData
         }
     });
 
-    // 2. Regex scan on body text
     let match;
     while ((match = emailRegex.exec(rawHtml)) !== null) {
         const email = match[0].toLowerCase();
-        // Filter out image filenames and tracking domains
         if (email.endsWith('.png') || email.endsWith('.jpg') || email.endsWith('.webp') ||
             email.endsWith('.svg') || email.endsWith('.gif') || email.includes('sentry.io') ||
             email.includes('example.com')) continue;
@@ -165,38 +180,45 @@ function extractContacts($: cheerio.CheerioAPI, rawHtml: string): EnrichmentData
         }
     }
 
-    // 3. Contact Form
     const hasContactForm = $('form').length > 0;
-
-    // 4. Phone (tel: links)
     const hasPhone = $('a[href^="tel:"]').length > 0;
 
     return { emails, hasContactForm, hasPhone };
 }
 
 function extractSeo($: cheerio.CheerioAPI): EnrichmentData['seo'] {
-    // H1 Tags
     const h1Texts: string[] = [];
     $('h1').each((_, el) => {
         const text = $(el).text().trim();
         if (text) h1Texts.push(text);
     });
 
-    // Title Tag
     const titleText = $('title').text().trim();
-
-    // Meta Description
     const metaDescTag = $('meta[name="description"]');
     const metaDescContent = metaDescTag.attr('content')?.trim() || '';
-
-    // Viewport
     const hasViewport = $('meta[name="viewport"]').length > 0;
-
-    // NoIndex ("Fatal Flaw")
     const hasNoIndex = $('meta[name="robots"][content*="noindex"]').length > 0;
-
-    // Schema Markup
     const hasSchemaMarkup = $('script[type="application/ld+json"]').length > 0;
+    const hasOgImage = $('meta[property="og:image"]').length > 0;
+
+    let revenuePagesCount = 0;
+    const revWords = ['/service', '/treatment', '/class', '/product', '/pricing'];
+    let isSinglePage = false;
+    const navLinks = $('nav a, header a');
+    if (navLinks.length > 0) {
+        isSinglePage = true;
+        navLinks.each((_, el) => {
+            const href = $(el).attr('href') || '';
+            if (href && !href.startsWith('#')) isSinglePage = false;
+        });
+    }
+
+    $('a').each((_, el) => {
+        const href = ($(el).attr('href') || '').toLowerCase();
+        if (revWords.some(w => href.includes(w))) {
+            revenuePagesCount++;
+        }
+    });
 
     return {
         h1Tags: { count: h1Texts.length, texts: h1Texts },
@@ -205,15 +227,16 @@ function extractSeo($: cheerio.CheerioAPI): EnrichmentData['seo'] {
         hasViewport,
         hasNoIndex,
         hasSchemaMarkup,
+        hasOgImage,
+        revenuePagesCount,
+        isSinglePage
     };
 }
 
 function extractPixels($: cheerio.CheerioAPI, rawHtml: string): EnrichmentData['pixels'] {
     const htmlLower = rawHtml.toLowerCase();
-
     const hasMetaPixel = htmlLower.includes('connect.facebook.net') || htmlLower.includes('fbq(');
     const hasGoogleAds = htmlLower.includes('googletagmanager.com') || htmlLower.includes('gtag(');
-
     return { hasMetaPixel, hasGoogleAds };
 }
 
@@ -242,10 +265,15 @@ function extractExpansionKeywords($: cheerio.CheerioAPI): string[] {
 
 function extractCtas($: cheerio.CheerioAPI): EnrichmentData['ctas'] {
     let hasGeneralCTA = false;
+    let hasReviewWidget = false;
     const bookingUrls: { platform: string; url: string }[] = [];
     const seenBookingUrls = new Set<string>();
 
-    // Collect all hrefs from <a> tags and src from <iframe> tags
+    const htmlLower = $.html().toLowerCase();
+    if (htmlLower.includes('elfsight') || htmlLower.includes('trustpilot') || htmlLower.includes('google reviews') || htmlLower.includes('birdeye')) {
+        hasReviewWidget = true;
+    }
+
     const allUrls: string[] = [];
     $('a[href]').each((_, el) => {
         allUrls.push(($(el).attr('href') || '').toLowerCase());
@@ -255,7 +283,6 @@ function extractCtas($: cheerio.CheerioAPI): EnrichmentData['ctas'] {
     });
 
     for (const url of allUrls) {
-        // General CTA check
         if (!hasGeneralCTA) {
             for (const kw of CTA_KEYWORDS) {
                 if (url.includes(kw)) {
@@ -265,7 +292,6 @@ function extractCtas($: cheerio.CheerioAPI): EnrichmentData['ctas'] {
             }
         }
 
-        // Booking platform check
         for (const [domain, platformName] of Object.entries(BOOKING_PLATFORMS)) {
             if (url.includes(domain) && !seenBookingUrls.has(domain)) {
                 seenBookingUrls.add(domain);
@@ -274,7 +300,7 @@ function extractCtas($: cheerio.CheerioAPI): EnrichmentData['ctas'] {
         }
     }
 
-    return { hasGeneralCTA, bookingUrls };
+    return { hasGeneralCTA, hasReviewWidget, bookingUrls };
 }
 
 function extractSocials($: cheerio.CheerioAPI): EnrichmentData['socials'] {
@@ -286,21 +312,13 @@ function extractSocials($: cheerio.CheerioAPI): EnrichmentData['socials'] {
         const href = $(el).attr('href') || '';
         const hrefLower = href.toLowerCase();
 
-        // Instagram
         if (!instagram && hrefLower.includes('instagram.com/')) {
             const handleMatch = href.match(/instagram\.com\/([a-zA-Z0-9._]+)/i);
-            instagram = {
-                url: href,
-                handle: handleMatch ? handleMatch[1] : '',
-            };
+            instagram = { url: href, handle: handleMatch ? handleMatch[1] : '' };
         }
-
-        // Facebook
         if (!facebook && hrefLower.includes('facebook.com/')) {
             facebook = { url: href };
         }
-
-        // TikTok
         if (!tiktok && hrefLower.includes('tiktok.com/')) {
             tiktok = { url: href };
         }
@@ -310,16 +328,13 @@ function extractSocials($: cheerio.CheerioAPI): EnrichmentData['socials'] {
 }
 
 function extractUxDecay($: cheerio.CheerioAPI, rawHtml: string): EnrichmentData['uxDecay'] {
-    // 1. Outdated Copyright
     const copyrightRegex = /(?:©|Copyright)\s*(?:[0-9]{4}-)?([0-9]{4})/i;
-    // Prefer footer, fall back to body
     const footerText = $('footer').text();
     const searchText = footerText || rawHtml;
     const copyrightMatch = searchText.match(copyrightRegex);
     const copyrightYear = copyrightMatch ? parseInt(copyrightMatch[1], 10) : null;
     const isOutdatedCopyright = copyrightYear !== null && copyrightYear <= 2024;
 
-    // 2. Cheap Web Builder
     const htmlLower = rawHtml.toLowerCase();
     const usesCheapBuilder = CHEAP_BUILDERS.some(b => htmlLower.includes(b));
 
@@ -335,8 +350,6 @@ const ROUTE_ANCHOR_TEXTS = ['contact', 'get in touch', 'reach us', 'about us', '
 
 function findSubPageUrls($: cheerio.CheerioAPI, baseUrl: string): string[] {
     const candidates = new Set<string>();
-
-    // Gather links from semantic sections first, fall back to body
     const sections = $('nav a, header a, footer a');
     const linksToScan = sections.length > 0 ? sections : $('body a');
 
@@ -352,22 +365,18 @@ function findSubPageUrls($: cheerio.CheerioAPI, baseUrl: string): string[] {
         if (hrefMatch || textMatch) {
             try {
                 const resolvedUrl = new URL(href, baseUrl).toString();
-                // Only follow same-origin links
                 if (new URL(resolvedUrl).origin === new URL(baseUrl).origin) {
                     candidates.add(resolvedUrl);
                 }
-            } catch {
-                // invalid URL
-            }
+            } catch {}
         }
     });
 
-    // Return max 2 unique URLs
     return Array.from(candidates).slice(0, 2);
 }
 
 // ============================================================
-// LIGHT EXTRACTION (for sub-pages — contact/conversion data only)
+// LIGHT EXTRACTION (for sub-pages)
 // ============================================================
 
 interface LightExtraction {
@@ -396,10 +405,7 @@ function extractLight($: cheerio.CheerioAPI, rawHtml: string): LightExtraction {
 // MERGE HELPERS
 // ============================================================
 
-function mergeEmails(
-    base: EnrichmentData['contacts']['emails'],
-    incoming: EnrichmentData['contacts']['emails']
-): EnrichmentData['contacts']['emails'] {
+function mergeEmails(base: EnrichmentData['contacts']['emails'], incoming: EnrichmentData['contacts']['emails']): EnrichmentData['contacts']['emails'] {
     const seen = new Set(base.map(e => e.email));
     const merged = [...base];
     for (const e of incoming) {
@@ -411,10 +417,7 @@ function mergeEmails(
     return merged;
 }
 
-function mergeSocials(
-    base: EnrichmentData['socials'],
-    incoming: EnrichmentData['socials']
-): EnrichmentData['socials'] {
+function mergeSocials(base: EnrichmentData['socials'], incoming: EnrichmentData['socials']): EnrichmentData['socials'] {
     return {
         instagram: base.instagram || incoming.instagram,
         facebook: base.facebook || incoming.facebook,
@@ -422,10 +425,7 @@ function mergeSocials(
     };
 }
 
-function mergeCtas(
-    base: EnrichmentData['ctas'],
-    incoming: EnrichmentData['ctas']
-): EnrichmentData['ctas'] {
+function mergeCtas(base: EnrichmentData['ctas'], incoming: EnrichmentData['ctas']): EnrichmentData['ctas'] {
     const seenPlatforms = new Set(base.bookingUrls.map(b => b.platform));
     const mergedBooking = [...base.bookingUrls];
     for (const b of incoming.bookingUrls) {
@@ -436,7 +436,155 @@ function mergeCtas(
     }
     return {
         hasGeneralCTA: base.hasGeneralCTA || incoming.hasGeneralCTA,
+        hasReviewWidget: base.hasReviewWidget || incoming.hasReviewWidget,
         bookingUrls: mergedBooking,
+    };
+}
+
+// ============================================================
+// 100-POINT SCORING ENGINE
+// ============================================================
+
+interface GoogleData {
+    url: string;
+    reviewCount: number;
+    reviewAvg: number;
+    mobilePerformance?: number | null;
+    desktopPerformance?: number | null;
+}
+
+export function calculateLeadScore(data: EnrichmentData, google: GoogleData): ScoreBreakdown {
+    let total_score = 0;
+    const rulesTriggered: string[] = [];
+    const uxRules: string[] = [];
+    const maturityRules: string[] = [];
+    const contactRules: string[] = [];
+
+    // ============================
+    // CATEGORY 1: UX Decay & Technical Failure (Max 45)
+    // ============================
+    let uxDecayTechnical = 0;
+
+    const mobileScore = google.mobilePerformance ?? 100;
+    const desktopScore = google.desktopPerformance ?? 100;
+    if (mobileScore < 60 || desktopScore < 60) {
+        uxDecayTechnical += 15;
+        const msg = mobileScore < 60 ? `Mobile Speed Tool: ${mobileScore}/100 (+15)` : `Desktop Speed Tool: ${desktopScore}/100 (+15)`;
+        rulesTriggered.push(msg);
+        uxRules.push(msg);
+    }
+
+    let seoPenalty = 0;
+    if (data.seo.h1Tags.count === 0 || data.seo.h1Tags.count > 1) {
+        seoPenalty += 5;
+        const msg = `H1 Count Error: ${data.seo.h1Tags.count} (+5)`;
+        rulesTriggered.push(msg);
+        uxRules.push(msg);
+    }
+    if (!data.seo.metaDescription.exists || data.seo.titleTag.isEmpty) {
+        seoPenalty += 5;
+        const msg = data.seo.titleTag.isEmpty ? 'Missing Meta Title (+5)' : 'Missing Meta Description (+5)';
+        rulesTriggered.push(msg);
+        uxRules.push(msg);
+    }
+    uxDecayTechnical += Math.min(seoPenalty, 10);
+
+    let structuralPenalty = 0;
+    if (!data.seo.hasSchemaMarkup) {
+        structuralPenalty += 5;
+        const msg = 'Missing Schema.org Markup (+5)';
+        rulesTriggered.push(msg);
+        uxRules.push(msg);
+    }
+    if (data.seo.revenuePagesCount <= 1 || data.seo.isSinglePage) {
+        structuralPenalty += 5;
+        const msg = data.seo.isSinglePage ? 'Single Page Site (+5)' : 'Thin Service Content (+5)';
+        rulesTriggered.push(msg);
+        uxRules.push(msg);
+    }
+    uxDecayTechnical += Math.min(structuralPenalty, 10);
+
+    let conversionPenalty = 0;
+    const hasBooking = data.ctas.bookingUrls.length > 0;
+    if (!data.ctas.hasGeneralCTA || !hasBooking) {
+        conversionPenalty += 5;
+        const msg = !hasBooking ? 'No Online Booking (+5)' : 'No CTA Keywords (+5)';
+        rulesTriggered.push(msg);
+        uxRules.push(msg);
+    }
+    if (!data.ctas.hasReviewWidget || !data.seo.hasOgImage) {
+        conversionPenalty += 5;
+        const msg = !data.ctas.hasReviewWidget ? 'Missing Review Widget (+5)' : 'Missing OG Social Image (+5)';
+        rulesTriggered.push(msg);
+        uxRules.push(msg);
+    }
+    uxDecayTechnical += Math.min(conversionPenalty, 10);
+    uxDecayTechnical = Math.min(uxDecayTechnical, 45);
+
+    // ============================
+    // CATEGORY 2: Cash Flow & Maturity (Max 30)
+    // ============================
+    let cashFlowMaturity = 0;
+
+    if (data.pixels.hasMetaPixel || data.pixels.hasGoogleAds) {
+        cashFlowMaturity += 15;
+        const msg = data.pixels.hasMetaPixel ? 'Active Meta Ads (+15)' : 'Active Google Ads (+15)';
+        rulesTriggered.push(msg);
+        maturityRules.push(msg);
+    }
+    if (google.reviewCount >= 40) {
+        cashFlowMaturity += 10;
+        const msg = `Review Maturity (${google.reviewCount} reviews) (+10)`;
+        rulesTriggered.push(msg);
+        maturityRules.push(msg);
+    }
+    if (data.expansionKeywords.length > 0) {
+        cashFlowMaturity += 5;
+        const msg = 'Growth Mode (Hiring/Careers) (+5)';
+        rulesTriggered.push(msg);
+        maturityRules.push(msg);
+    }
+    cashFlowMaturity = Math.min(cashFlowMaturity, 30);
+
+    // ============================
+    // CATEGORY 3: Contact Access (Max 25)
+    // ============================
+    let contactability = 0;
+    const personalEmails = data.contacts.emails.filter(e => e.type?.toLowerCase() === 'personal');
+    const genericEmails = data.contacts.emails.filter(e => e.type?.toLowerCase() === 'generic');
+
+    if (personalEmails.length > 0) {
+        contactability += 20;
+        const msg = 'Direct DM Access (+20)';
+        rulesTriggered.push(msg);
+        contactRules.push(msg);
+    } else if (genericEmails.length > 0) {
+        contactability += 10;
+        const msg = 'Gatekeeper (Info/Contact) (+10)';
+        rulesTriggered.push(msg);
+        contactRules.push(msg);
+    }
+
+    const hasSocials = data.socials.instagram || data.socials.facebook || data.socials.tiktok;
+    if (data.contacts.hasContactForm || hasSocials) {
+        contactability += 5;
+        const msg = data.contacts.hasContactForm ? 'Contact Form Detected (+5)' : 'Social Channels Found (+5)';
+        rulesTriggered.push(msg);
+        contactRules.push(msg);
+    }
+    contactability = Math.min(contactability, 25);
+
+    total_score = uxDecayTechnical + cashFlowMaturity + contactability;
+
+    return {
+        total: total_score,
+        uxDecayTechnical,
+        cashFlowMaturity,
+        contactability,
+        rulesTriggered: rulesTriggered.slice(0, 5),
+        uxRules,
+        maturityRules,
+        contactRules
     };
 }
 
@@ -449,15 +597,13 @@ export async function scrapeWebsite(
     city: string,
     niche: string,
     reviewCount: number = 0,
-    reviewAvg: number = 0
+    reviewAvg: number = 0,
+    mobilePerformance?: number | null,
+    desktopPerformance?: number | null
 ): Promise<ScrapeResult> {
-    // ============================
-    // STEP 1: THE HOMEPAGE SWEEP
-    // ============================
     const homepageHtml = await safeFetch(url);
     const homepage$ = cheerio.load(homepageHtml || '<html lang="en"><body></body></html>');
 
-    // Full extraction on homepage
     let contacts = extractContacts(homepage$, homepageHtml);
     const seo = extractSeo(homepage$);
     const pixels = extractPixels(homepage$, homepageHtml);
@@ -466,23 +612,14 @@ export async function scrapeWebsite(
     let socials = extractSocials(homepage$);
     const uxDecay = extractUxDecay(homepage$, homepageHtml);
 
-    // ============================
-    // STEP 2: SMART ROUTING
-    // ============================
     const subPageUrls = findSubPageUrls(homepage$, url);
 
-    // ============================
-    // STEP 3: THE DEEP DIVE (contact/conversion data only)
-    // ============================
     for (const subUrl of subPageUrls) {
         const subHtml = await safeFetch(subUrl);
         if (!subHtml) continue;
         const sub$ = cheerio.load(subHtml);
         const light = extractLight(sub$, subHtml);
 
-        // ============================
-        // STEP 4: MERGE & DEDUPLICATE
-        // ============================
         contacts = {
             emails: mergeEmails(contacts.emails, light.emails),
             hasContactForm: contacts.hasContactForm || light.hasContactForm,
@@ -492,37 +629,19 @@ export async function scrapeWebsite(
         ctas = mergeCtas(ctas, light.ctas);
     }
 
-    // ============================
-    // BUILD FINAL ENRICHMENT DATA
-    // ============================
-    const enrichment: EnrichmentData = {
-        contacts,
-        seo,
-        pixels,
-        expansionKeywords,
-        ctas,
-        socials,
-        uxDecay,
-    };
+    const enrichment: EnrichmentData = { contacts, seo, pixels, expansionKeywords, ctas, socials, uxDecay };
 
-    // ============================
-    // 100-POINT SCORING ENGINE
-    // ============================
-    const scoreBreakdown = calculateLeadScore(enrichment, { url, reviewCount, reviewAvg });
+    const scoreBreakdown = calculateLeadScore(enrichment, { 
+        url, reviewCount, reviewAvg, mobilePerformance, desktopPerformance 
+    });
 
-    // Legacy field mappings (for scores table: score_overall, score_contactability, score_seo, score_local_intent, score_fit)
     const has_booking_link = ctas.hasGeneralCTA || ctas.bookingUrls.length > 0;
-
-    // Legacy socials array
     const legacySocials: { platform: string; url: string }[] = [];
     if (socials.instagram) legacySocials.push({ platform: 'instagram', url: socials.instagram.url });
     if (socials.facebook) legacySocials.push({ platform: 'facebook', url: socials.facebook.url });
     if (socials.tiktok) legacySocials.push({ platform: 'tiktok', url: socials.tiktok.url });
 
-    // Legacy emails array
     const legacyEmails = contacts.emails.map(e => ({ email: e.email, type: e.type }));
-
-    // Biggest weakness (derived from highest-weight triggered rule)
     let biggestWeakness = 'Solid Digital Presence';
     if (scoreBreakdown.rulesTriggered.length > 0) {
         biggestWeakness = `🔴 ${scoreBreakdown.rulesTriggered[0]}`;
@@ -531,7 +650,6 @@ export async function scrapeWebsite(
     return {
         url,
         scoreBreakdown,
-        // Map new categories to legacy score columns
         contactabilityScore: scoreBreakdown.contactability,
         seoScore: scoreBreakdown.uxDecayTechnical,
         localIntentScore: scoreBreakdown.cashFlowMaturity,
@@ -545,128 +663,22 @@ export async function scrapeWebsite(
             has_h1: seo.h1Tags.count > 0,
             has_booking_link,
             has_schema: seo.hasSchemaMarkup,
+            h1_count: seo.h1Tags.count,
+            has_meta_description: seo.metaDescription.exists,
+            has_og_image: seo.hasOgImage,
+            uses_cheap_builder: uxDecay.usesCheapBuilder,
+            revenue_pages_count: seo.revenuePagesCount,
+            is_single_page: seo.isSinglePage,
+            has_cta_keywords: ctas.hasGeneralCTA,
+            has_review_widget: ctas.hasReviewWidget,
+            has_meta_pixel: pixels.hasMetaPixel,
+            has_google_ads_tag: pixels.hasGoogleAds,
+            has_expansion_keywords: expansionKeywords.length > 0,
+            has_contact_form: contacts.hasContactForm,
+            pagespeed_mobile: mobilePerformance,
+            pagespeed_desktop: desktopPerformance,
         },
         biggestWeakness,
         enrichment,
     };
 }
-
-// ============================================================
-// 100-POINT SCORING ENGINE
-// ============================================================
-
-const GENERIC_PREFIXES = ['info', 'contact', 'admin', 'hello', 'support', 'sales', 'office'];
-
-interface GoogleData {
-    url: string;
-    reviewCount: number;
-    reviewAvg: number;
-}
-
-export function calculateLeadScore(data: EnrichmentData, google: GoogleData): ScoreBreakdown {
-    let total_score = 0;
-    const rulesTriggered: string[] = [];
-
-    // ============================
-    // CATEGORY 1: UX Decay & Technical Failure (Max 45)
-    // ============================
-    let uxDecayTechnical = 0;
-
-    // Rule 1: Outdated or Amateur UI (+10)
-    if (data.uxDecay.isOutdatedCopyright || data.uxDecay.usesCheapBuilder) {
-        uxDecayTechnical += 10;
-        rulesTriggered.push(data.uxDecay.usesCheapBuilder ? 'Cheap Web Builder Detected' : 'Outdated Copyright');
-    }
-
-    // Rule 2: Ghost Town / High Friction (+10)
-    const isTotallyIsolated = data.contacts.emails.length === 0 && !data.contacts.hasPhone && !data.contacts.hasContactForm;
-    if (isTotallyIsolated || !data.ctas.hasGeneralCTA) {
-        uxDecayTechnical += 10;
-        rulesTriggered.push(isTotallyIsolated ? 'Ghost Town (No Contact Methods)' : 'No CTA Keywords');
-    }
-
-    // Rule 3: Fatal Search Flaw (+10)
-    const isHttpNotSecure = google.url.startsWith('http://') && !google.url.startsWith('https://');
-    if (isHttpNotSecure || data.seo.hasNoIndex) {
-        uxDecayTechnical += 10;
-        rulesTriggered.push(data.seo.hasNoIndex ? 'NoIndex Detected (Fatal)' : 'HTTP Not Secure');
-    }
-
-    // Rule 4: Mobile Bounce (+10)
-    if (!data.seo.hasViewport) {
-        uxDecayTechnical += 10;
-        rulesTriggered.push('No Mobile Viewport');
-    }
-
-    // Rule 5: Structural SEO Failure (+5)
-    if (data.seo.h1Tags.count === 0 || data.seo.h1Tags.count > 1 || data.seo.titleTag.isEmpty) {
-        uxDecayTechnical += 5;
-        rulesTriggered.push(data.seo.titleTag.isEmpty ? 'Empty Title Tag' : `H1 Count: ${data.seo.h1Tags.count}`);
-    }
-
-    uxDecayTechnical = Math.min(uxDecayTechnical, 45);
-    total_score += uxDecayTechnical;
-
-    // ============================
-    // CATEGORY 2: Cash Flow & Maturity (Max 30)
-    // ============================
-    let cashFlowMaturity = 0;
-
-    // Rule 6: Active Ad Spender (+15)
-    if (data.pixels.hasMetaPixel || data.pixels.hasGoogleAds) {
-        cashFlowMaturity += 15;
-        rulesTriggered.push('Active Ad Spender');
-    }
-
-    // Rule 7: High Customer Volume (+10)
-    if (google.reviewCount >= 40) {
-        cashFlowMaturity += 10;
-        rulesTriggered.push(`High Review Volume (${google.reviewCount})`);
-    }
-
-    // Rule 8: Expansion & Payroll (+5)
-    if (data.expansionKeywords.length > 0) {
-        cashFlowMaturity += 5;
-        rulesTriggered.push(`Expansion Keywords: ${data.expansionKeywords.join(', ')}`);
-    }
-
-    cashFlowMaturity = Math.min(cashFlowMaturity, 30);
-    total_score += cashFlowMaturity;
-
-    // ============================
-    // CATEGORY 3: Contactability (Max 25)
-    // ============================
-    let contactability = 0;
-
-    // Rule 9: Direct Inbox Access (max 20, mutually exclusive tiers)
-    const hasPersonalEmail = data.contacts.emails.some(
-        e => !GENERIC_PREFIXES.some(prefix => e.email.toLowerCase().startsWith(prefix + '@'))
-    );
-    const hasAnyEmail = data.contacts.emails.length > 0;
-
-    if (hasPersonalEmail) {
-        contactability += 20;
-        rulesTriggered.push('Personal Email Found');
-    } else if (hasAnyEmail) {
-        contactability += 10;
-        rulesTriggered.push('Generic Email Only');
-    }
-
-    // Rule 10: Form Fallback (+5, stacks)
-    if (data.contacts.hasContactForm) {
-        contactability += 5;
-        rulesTriggered.push('Contact Form Available');
-    }
-
-    contactability = Math.min(contactability, 25);
-    total_score += contactability;
-
-    return {
-        total: Math.min(total_score, 100),
-        uxDecayTechnical,
-        cashFlowMaturity,
-        contactability,
-        rulesTriggered,
-    };
-}
-

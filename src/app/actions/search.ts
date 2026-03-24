@@ -25,7 +25,13 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
             ig_activity,
             rating_count,
             scores!left (score_overall, score_contactability, score_seo, score_local_intent, score_fit),
-            seo_audits!left (has_title, title_len, has_h1, has_booking_link, schema_org_types, top_keywords_found, pagespeed_mobile, pagespeed_desktop),
+            seo_audits!left (
+                has_title, title_len, has_h1, has_booking_link, schema_org_types, top_keywords_found, 
+                pagespeed_mobile, pagespeed_desktop, mobile_load_time, h1_count, 
+                has_meta_description, has_og_image, uses_cheap_builder, revenue_pages_count, 
+                is_single_page, has_cta_keywords, has_review_widget, has_meta_pixel, 
+                has_google_ads_tag, has_expansion_keywords, has_contact_form
+            ),
             contacts!left (email, type),
             socials!left (platform, url)
         `)
@@ -90,20 +96,51 @@ async function getHydratedLeads(workspaceId: string, leads: any[]) {
                                 has_schema: (audit?.schema_org_types?.length || 0) > 0,
                                 pagespeed_mobile: audit?.pagespeed_mobile ?? null,
                                 pagespeed_desktop: audit?.pagespeed_desktop ?? null,
+                                mobile_load_time: audit?.mobile_load_time ?? null,
+                                h1_count: audit?.h1_count ?? (audit?.has_h1 ? 1 : 0),
+                                has_meta_description: audit?.has_meta_description ?? false,
+                                has_og_image: audit?.has_og_image ?? false,
+                                uses_cheap_builder: audit?.uses_cheap_builder ?? false,
+                                revenue_pages_count: audit?.revenue_pages_count ?? 0,
+                                is_single_page: audit?.is_single_page ?? false,
+                                has_cta_keywords: audit?.has_cta_keywords ?? false,
+                                has_review_widget: audit?.has_review_widget ?? false,
+                                has_meta_pixel: audit?.has_meta_pixel ?? false,
+                                has_google_ads_tag: audit?.has_google_ads_tag ?? false,
+                                has_expansion_keywords: audit?.has_expansion_keywords ?? false,
+                                has_contact_form: audit?.has_contact_form ?? false,
                             },
                             enrichment: {
                                 contacts: {
                                     emails: company.contacts || [],
-                                    hasContactForm: company.contacts?.some((c: any) => c.type === 'form_only') || false,
+                                    hasContactForm: audit?.has_contact_form ?? false,
                                     hasPhone: !!matchingLead.phone,
                                 },
                                 seo: {
                                     titleTag: { text: '', isEmpty: !audit?.has_title },
-                                    h1Tags: { count: audit?.has_h1 ? 1 : 0, texts: [] },
-                                    metaDescription: { exists: false, content: '' },
+                                    h1Tags: { count: audit?.h1_count ?? (audit?.has_h1 ? 1 : 0), texts: [] },
+                                    metaDescription: { exists: audit?.has_meta_description ?? false, content: '' },
+                                    hasOgImage: audit?.has_og_image ?? false,
                                     hasViewport: true,
                                     hasNoIndex: false,
                                     hasSchemaMarkup: (audit?.schema_org_types?.length || 0) > 0,
+                                    revenuePagesCount: audit?.revenue_pages_count ?? 0,
+                                    isSinglePage: audit?.is_single_page ?? false,
+                                },
+                                uxDecay: {
+                                    copyrightYear: null,
+                                    isOutdatedCopyright: false,
+                                    usesCheapBuilder: audit?.uses_cheap_builder ?? false,
+                                },
+                                pixels: {
+                                    hasMetaPixel: audit?.has_meta_pixel ?? false,
+                                    hasGoogleAds: audit?.has_google_ads_tag ?? false,
+                                },
+                                expansionKeywords: audit?.top_keywords_found || [],
+                                ctas: {
+                                    hasGeneralCTA: audit?.has_cta_keywords ?? false,
+                                    hasReviewWidget: audit?.has_review_widget ?? false,
+                                    bookingUrls: []
                                 },
                                 socials: {
                                     facebook: company.socials?.find((s: any) => s.platform === 'facebook'),
@@ -177,7 +214,7 @@ export async function searchGooglePlaces(niche: string, city: string, pageToken?
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Goog-Api-Key': apiKey,
-                    'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,nextPageToken',
+                    'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.primaryType,nextPageToken',
                 },
                 body: JSON.stringify(requestBody)
             });
@@ -201,6 +238,7 @@ export async function searchGooglePlaces(niche: string, city: string, pageToken?
                     website: place.websiteUri || "",
                     phone: place.nationalPhoneNumber || "",
                     niche: niche,
+                    primary_category: place.primaryType || "",
                     rating: place.rating || 0,
                     ratingCount: place.userRatingCount || 0
                 };

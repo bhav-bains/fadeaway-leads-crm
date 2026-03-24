@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { scrapeWebsite } from '@/lib/scraper'
+import { scrapeWebsite, calculateLeadScore } from '@/lib/scraper'
 
 export async function insertLead(
     leadData: { 
@@ -13,7 +13,9 @@ export async function insertLead(
         website?: string; 
         niche?: string; 
         reviewCount?: number; 
-        googlePlaceId?: string 
+        googlePlaceId?: string;
+        primary_category?: string;
+        win_probability?: number;
     }, 
     scrapeResult?: Record<string, any>
 ) {
@@ -109,6 +111,9 @@ export async function insertLead(
                 website: leadData.website || existingCompany.website,
                 source_id: leadData.googlePlaceId || existingCompany.source_id,
                 niche: leadData.niche || existingCompany.niche,
+                primary_category: leadData.primary_category || existingCompany.primary_category,
+                rating_count: leadData.reviewCount || existingCompany.rating_count,
+                rating_avg: leadData.reviewCount ? existingCompany.rating_avg : existingCompany.rating_avg, // ratingAvg not passed yet but keeping place
                 status: (existingCompany.status === 'New' && scrapeResult) ? 'Audited' : existingCompany.status,
             })
             .eq('id', existingCompany.id)
@@ -130,6 +135,8 @@ export async function insertLead(
                 website: leadData.website,
                 source_id: leadData.googlePlaceId,
                 niche: leadData.niche,
+                primary_category: leadData.primary_category,
+                rating_count: leadData.reviewCount,
                 status: scrapeResult ? 'Audited' : 'New'
             }])
             .select()
@@ -165,7 +172,19 @@ export async function insertLead(
             has_h1: scrapeResult.seoAudit?.has_h1 || false,
             has_booking_link: scrapeResult.seoAudit?.has_booking_link || false,
             schema_org_types: scrapeResult.seoAudit?.has_schema ? ['Found'] : [],
-            top_keywords_found: scrapeResult.enrichment?.expansionKeywords || []
+            top_keywords_found: scrapeResult.enrichment?.expansionKeywords || [],
+            h1_count: scrapeResult.seoAudit?.h1_count || 0,
+            has_meta_description: scrapeResult.seoAudit?.has_meta_description || false,
+            has_og_image: scrapeResult.seoAudit?.has_og_image || false,
+            uses_cheap_builder: scrapeResult.seoAudit?.uses_cheap_builder || false,
+            revenue_pages_count: scrapeResult.seoAudit?.revenue_pages_count || 0,
+            is_single_page: scrapeResult.seoAudit?.is_single_page || false,
+            has_cta_keywords: scrapeResult.seoAudit?.has_cta_keywords || false,
+            has_review_widget: scrapeResult.seoAudit?.has_review_widget || false,
+            has_meta_pixel: scrapeResult.seoAudit?.has_meta_pixel || false,
+            has_google_ads_tag: scrapeResult.seoAudit?.has_google_ads_tag || false,
+            has_expansion_keywords: scrapeResult.seoAudit?.has_expansion_keywords || false,
+            has_contact_form: scrapeResult.seoAudit?.has_contact_form || false
         }]);
 
         // Insert fresh Scores
@@ -219,8 +238,14 @@ export async function runLocalSeoAudit(
     website: string,
     city: string,
     niche: string,
-    ratingCount: number,
-    leadMeta?: { name: string; address: string; phone?: string; reviewCount?: number; googlePlaceId?: string }
+    leadMeta?: { 
+        name: string; 
+        address: string; 
+        phone?: string; 
+        reviewCount?: number; 
+        googlePlaceId?: string;
+        primary_category?: string;
+    }
 ) {
     let urlToScrape = website;
     if (urlToScrape && !urlToScrape.startsWith('http')) {
@@ -232,7 +257,30 @@ export async function runLocalSeoAudit(
     }
 
     try {
-        const scrape = await scrapeWebsite(urlToScrape, city, niche, ratingCount);
+        const supabase = await createClient();
+        
+        // Try to find existing performance scores if this is a re-audit
+        let existingAudit = null;
+        if (leadMeta?.googlePlaceId) {
+            const { data: comp } = await supabase
+                .from('companies')
+                .select('id, seo_audits(pagespeed_mobile, pagespeed_desktop)')
+                .eq('source_id', leadMeta.googlePlaceId)
+                .single();
+            if (comp?.seo_audits?.[0]) {
+                existingAudit = comp.seo_audits[0];
+            }
+        }
+
+        const scrape = await scrapeWebsite(
+            urlToScrape, 
+            city, 
+            niche, 
+            leadMeta?.reviewCount || 0, 
+            0, // reviewAvg fallback
+            existingAudit?.pagespeed_mobile,
+            existingAudit?.pagespeed_desktop
+        );
 
         let finalCompanyId: string | undefined;
 
@@ -247,7 +295,8 @@ export async function runLocalSeoAudit(
                     website,
                     niche,
                     reviewCount: leadMeta.reviewCount,
-                    googlePlaceId: leadMeta.googlePlaceId
+                    googlePlaceId: leadMeta.googlePlaceId,
+                    primary_category: leadMeta.primary_category
                 },
                 scrape as unknown as Record<string, any>
             );
@@ -325,6 +374,7 @@ export async function updateLeadManualData(
         manual_email?: string;
         manual_phone?: string;
         instagram_url?: string;
+        win_probability?: string | null;
     }
 ) {
     const supabase = await createClient()
@@ -339,6 +389,7 @@ export async function updateLeadManualData(
     if (updates.ig_activity !== undefined) companyUpdate.ig_activity = updates.ig_activity
     if (updates.manual_phone) companyUpdate.phone = updates.manual_phone
     if (updates.instagram_url !== undefined) companyUpdate.instagram_url = updates.instagram_url
+    if (updates.win_probability !== undefined) companyUpdate.win_probability = updates.win_probability
 
     if (Object.keys(companyUpdate).length > 0) {
         const { error } = await supabase
@@ -485,9 +536,11 @@ export async function fetchAndSavePageSpeed(companyId: string, website: string) 
     }
 
     try {
+        const apiKey = process.env.GOOGLE_PLACES_API_KEY || '';
+        const keyParam = apiKey ? `&key=${apiKey}` : '';
         const [mobileRes, desktopRes] = await Promise.all([
-            fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(urlToScrape)}&strategy=mobile`),
-            fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(urlToScrape)}&strategy=desktop`)
+            fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(urlToScrape)}&strategy=mobile${keyParam}`),
+            fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(urlToScrape)}&strategy=desktop${keyParam}`)
         ]);
 
         const mobileData = await mobileRes.json();
@@ -498,19 +551,100 @@ export async function fetchAndSavePageSpeed(companyId: string, website: string) 
 
         const pagespeed_mobile = mobileScoreRaw !== undefined ? Math.round(mobileScoreRaw * 100) : null;
         const pagespeed_desktop = desktopScoreRaw !== undefined ? Math.round(desktopScoreRaw * 100) : null;
+        
+        const mobile_load_time = mobileData?.lighthouseResult?.audits?.['speed-index']?.displayValue || null;
 
         const supabase = await createClient();
-        const { error } = await supabase
+        
+        // 1. Get current data to reconstruct EnrichmentData for score recalculation
+        const { data: companyDetails } = await supabase
+            .from('companies')
+            .select(`
+                *,
+                seo_audits(*),
+                contacts(*),
+                socials(*),
+                scores(*)
+            `)
+            .eq('id', companyId)
+            .single();
+
+        if (!companyDetails) throw new Error("Company not found");
+
+        const audit = companyDetails.seo_audits?.[0];
+        if (!audit) throw new Error("SEO Audit record missing");
+
+        // 2. Perform DB Update for PageSpeed
+        const { error: updateError } = await supabase
             .from('seo_audits')
-            .update({ pagespeed_mobile, pagespeed_desktop })
+            .update({ pagespeed_mobile, pagespeed_desktop, mobile_load_time })
             .eq('company_id', companyId);
 
-        if (error) throw new Error(error.message);
+        if (updateError) throw new Error(updateError.message);
+
+        // 3. Recalculate Score with new performance metrics
+        const mockEnrichment: any = {
+            contacts: {
+                emails: companyDetails.contacts?.map((c: any) => ({ email: c.email, type: c.type || 'generic' })) || [],
+                hasContactForm: audit.has_contact_form || false,
+                hasPhone: !!companyDetails.phone,
+            },
+            seo: {
+                h1Tags: { count: audit.h1_count || 0, texts: [] },
+                titleTag: { text: '', isEmpty: !audit.has_title },
+                metaDescription: { exists: !!audit.has_meta_description, content: '' },
+                hasOgImage: !!audit.has_og_image,
+                hasViewport: true,
+                hasNoIndex: false,
+                hasSchemaMarkup: (audit.schema_org_types && audit.schema_org_types.length > 0) || !!audit.has_schema,
+                revenuePagesCount: audit.revenue_pages_count || 0,
+                isSinglePage: audit.is_single_page || false,
+            },
+            pixels: {
+                hasMetaPixel: !!audit.has_meta_pixel,
+                hasGoogleAds: !!audit.has_google_ads_tag,
+            },
+            expansionKeywords: audit.top_keywords_found || [],
+            ctas: {
+                hasGeneralCTA: !!audit.has_cta_keywords,
+                hasReviewWidget: !!audit.has_review_widget,
+                bookingUrls: audit.has_booking_link ? [{ platform: 'detected', url: '' }] : []
+            },
+            socials: { 
+                instagram: companyDetails.socials?.find((s: any) => s.platform === 'instagram') ? { url: '', handle: '' } : null,
+                facebook: companyDetails.socials?.find((s: any) => s.platform === 'facebook') ? { url: '' } : null,
+                tiktok: companyDetails.socials?.find((s: any) => s.platform === 'tiktok') ? { url: '' } : null,
+            },
+            uxDecay: {
+                copyrightYear: null,
+                isOutdatedCopyright: false,
+                usesCheapBuilder: !!audit.uses_cheap_builder,
+            }
+        };
+
+        const newScore = calculateLeadScore(mockEnrichment, {
+            url: companyDetails.website || '',
+            reviewCount: companyDetails.rating_count || 0,
+            reviewAvg: companyDetails.rating_avg || 0,
+            mobilePerformance: pagespeed_mobile,
+            desktopPerformance: pagespeed_desktop
+        });
+
+        // 4. Update Score Table
+        await supabase
+            .from('scores')
+            .update({
+                score_overall: newScore.total,
+                score_contactability: newScore.contactability,
+                score_seo: newScore.uxDecayTechnical,
+                score_local_intent: newScore.cashFlowMaturity,
+            })
+            .eq('company_id', companyId);
 
         revalidatePath('/lead-finder');
         revalidatePath('/pipeline');
         
-        return { success: true, pagespeed_mobile, pagespeed_desktop };
+        return { success: true, pagespeed_mobile, pagespeed_desktop, mobile_load_time, newScore };
     } catch (error: any) {
         return { error: error.message || 'Failed to fetch PageSpeed' };
     }

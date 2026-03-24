@@ -24,6 +24,8 @@ create table public.companies (
   workspace_id uuid references public.workspaces(id) on delete restrict not null,
   name text not null,
   normalized_name text,
+  primary_category text,
+  win_probability int default 0,
   domain text,
   website text,
   phone text,
@@ -78,7 +80,22 @@ create table public.seo_audits (
   has_booking_link boolean,
   has_business_profile boolean,
   schema_org_types text[],
-  top_keywords_found text[]
+  top_keywords_found text[],
+  pagespeed_mobile int,
+  pagespeed_desktop int,
+  mobile_load_time text,
+  h1_count int,
+  has_meta_description boolean,
+  has_og_image boolean,
+  uses_cheap_builder boolean,
+  revenue_pages_count int,
+  is_single_page boolean,
+  has_cta_keywords boolean,
+  has_review_widget boolean,
+  has_meta_pixel boolean,
+  has_google_ads_tag boolean,
+  has_expansion_keywords boolean,
+  has_contact_form boolean
 );
 
 -- 5. scores (The Prioritization Brain)
