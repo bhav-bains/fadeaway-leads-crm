@@ -599,23 +599,45 @@ export default function LeadFinder() {
             </Card>
 
             {results.length > 0 && (
-                <div className="space-y-4 animate-in fade-in duration-500">
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-4 flex-1 w-full">
-                            <h3 className="text-xs sm:text-[13px] font-black uppercase tracking-[0.2em] text-white">
-                                Inbox - {filteredResultsCount} Sourced Leads, <span className="text-brand">{auditedResultsCount} Audited</span>
-                            </h3>
-                            <div className="flex-1 h-[1px] bg-zinc-800 hidden sm:block"></div>
+                <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500">
+                    <div className="flex flex-col gap-8 pt-8">
+                        {/* Premium Inbox Stat Bar */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-6">
+                            <div className="flex flex-wrap items-center gap-3 sm:gap-6">
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-1 h-3 bg-brand rounded-full"></div>
+                                        <h3 className="text-[13px] font-black uppercase tracking-[0.2em] text-white">
+                                            Inbox / Current Sourcing
+                                        </h3>
+                                    </div>
+                                    <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-zinc-500 ml-3">
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="text-zinc-300 font-black">{filteredResultsCount}</span> Sourced
+                                        </span>
+                                        <span className="w-1 h-1 bg-zinc-800 rounded-full"></span>
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="text-brand font-black">{auditedResultsCount}</span> Audited
+                                        </span>
+                                        <span className="w-1 h-1 bg-zinc-800 rounded-full"></span>
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="text-emerald-500 font-black">0</span> Outreached
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="relative group w-full sm:w-80">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 group-focus-within:text-brand transition-colors" />
+                                <Input 
+                                    placeholder="Search leads by name..." 
+                                    value={inboxSearch}
+                                    onChange={(e) => setInboxSearch(e.target.value)}
+                                    className="pl-11 h-11 bg-zinc-950/50 border-zinc-800 text-sm text-zinc-100 placeholder:text-zinc-500 w-full focus-visible:ring-brand/40 shadow-inner rounded-xl border-dashed hover:border-zinc-700 transition-all"
+                                />
+                            </div>
                         </div>
-                        <div className="relative w-full sm:w-72 shrink-0">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                            <Input 
-                                placeholder="Search leads by name..." 
-                                value={inboxSearch}
-                                onChange={(e) => setInboxSearch(e.target.value)}
-                                className="pl-10 h-10 bg-zinc-900 border-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-500 w-full focus-visible:ring-brand/40 shadow-inner rounded-xl"
-                            />
-                        </div>
+                        <div className="h-px bg-gradient-to-r from-zinc-800/50 via-zinc-800 to-zinc-800/50"></div>
                     </div>
 
                     {/* Filters Bar */}
@@ -628,7 +650,7 @@ export default function LeadFinder() {
 
 
                     {/* Dense Data Table */}
-                    <div className="space-y-12">
+                    <div className="space-y-12 sm:space-y-16">
                         {filteredResultsCount === 0 ? (
                             <div className="h-48 flex flex-col items-center justify-center border border-zinc-800 border-dashed rounded-3xl text-zinc-500 gap-2">
                                 <AlertCircle className="h-6 w-6 opacity-20" />
@@ -640,36 +662,36 @@ export default function LeadFinder() {
                                 const groupAuditedCount = groupLeads.filter((r: any) => auditedLeads[r.id]).length;
 
                                 return (
-                                    <div key={groupName} className="space-y-6">
+                                    <div key={groupName} className="space-y-8 sm:space-y-10">
                                         <div
-                                            className="flex items-center gap-4 cursor-pointer group/header select-none"
+                                            className="flex items-center gap-4 cursor-pointer group/header select-none py-1 sm:py-0"
                                             onClick={() => toggleGroup(groupName, groupIndex)}
                                         >
-                                            <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0 pr-2 sm:pr-0">
+                                            <div className="flex items-start sm:items-center gap-4 flex-1 min-w-0 pr-2 sm:pr-0">
                                                 <div className={cn(
-                                                    "shrink-0 mt-0.5 sm:mt-0 p-1 rounded-md bg-zinc-900 border border-zinc-700/50 group-hover/header:border-brand/50 transition-all",
-                                                    expanded && "border-brand/30"
+                                                    "shrink-0 mt-1 sm:mt-0 p-1.5 rounded-lg bg-zinc-900 border border-zinc-700/50 group-hover/header:border-brand/50 transition-all shadow-lg",
+                                                    expanded && "border-brand/30 bg-brand/5"
                                                 )}>
                                                     {expanded ? <ChevronDown className="h-4 w-4 text-brand" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
                                                 </div>
-                                                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                                                    <h4 className="text-sm font-black uppercase tracking-[0.2em] text-zinc-100 group-hover/header:text-brand transition-colors leading-[1.6] sm:leading-none break-words">
+                                                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 flex-1 min-w-0">
+                                                    <h4 className="text-[15px] sm:text-sm font-black uppercase tracking-[0.2em] text-zinc-100 group-hover/header:text-brand transition-colors leading-[1.4] sm:leading-none break-words">
                                                         {groupName}
                                                     </h4>
-                                                    <Badge variant="outline" className="shrink-0 w-fit bg-zinc-950/50 border-zinc-800 text-xs font-black tracking-widest px-3 h-6 rounded-full flex items-center gap-1.5 shadow-none transition-colors group-hover/header:border-zinc-700">
-                                                        <span className="text-zinc-300">{groupLeads.length} LEADS</span>
-                                                        <span className="text-zinc-700">|</span>
-                                                        <span className={groupAuditedCount > 0 ? "text-brand shadow-[0_0_10px_rgba(255,102,0,0.15)]" : "text-zinc-500"}>
+                                                    <Badge variant="outline" className="shrink-0 w-fit bg-zinc-900/80 backdrop-blur-sm border-zinc-800 text-[10px] font-black tracking-widest px-4 h-7 rounded-full flex items-center gap-2 shadow-xl transition-colors group-hover/header:border-zinc-700">
+                                                        <span className="text-zinc-400">{groupLeads.length} LEADS</span>
+                                                        <span className="text-zinc-800">|</span>
+                                                        <span className={groupAuditedCount > 0 ? "text-brand shadow-[0_0_15px_rgba(255,102,0,0.2)]" : "text-zinc-600"}>
                                                             {groupAuditedCount} AUDITS
                                                         </span>
                                                     </Badge>
                                                 </div>
                                             </div>
-                                            <div className="hidden sm:block flex-1 h-[2px] bg-gradient-to-r from-zinc-800 to-transparent"></div>
+                                            <div className="hidden sm:block flex-1 h-[1px] bg-gradient-to-r from-zinc-800 to-transparent"></div>
                                         </div>
 
                                         {expanded && (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8 animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 sm:gap-10 animate-in fade-in slide-in-from-top-4 duration-500">
                                                 {groupLeads.map((result: any) => {
                                                     const auditData = auditedLeads[result.id];
                                                     const inPipeline = leads.some(l => l.name === result.name);
@@ -795,7 +817,7 @@ export default function LeadFinder() {
             {/* Enrichment Data Drawer */}
             {/* Enrichment Data Popup */}
             <Dialog open={!!drawerLead} onOpenChange={(o) => { if (!o) setDrawerLead(null); }}>
-                <DialogContent className="w-full max-w-[95vw] md:max-w-[90vw] lg:max-w-5xl h-[90vh] p-0 overflow-hidden border border-brand/30 bg-zinc-800/95 backdrop-blur-3xl shadow-[0_0_100px_rgba(0,0,0,0.9)] ring-1 ring-white/10 rounded-2xl sm:rounded-2xl">
+                <DialogContent className="w-[92vw] sm:w-full max-w-[92vw] md:max-w-[90vw] lg:max-w-5xl h-[85vh] sm:h-[90vh] p-0 overflow-hidden border border-brand/30 bg-zinc-800/95 backdrop-blur-3xl shadow-[0_0_100px_rgba(0,0,0,0.9)] ring-1 ring-white/10 rounded-2xl sm:rounded-2xl outline-none focus:outline-none focus-visible:outline-none">
                     <DialogHeader className="sr-only">
                         <DialogTitle>{drawerLead?.name}</DialogTitle>
                         <DialogDescription>Lead enrichment and audit data</DialogDescription>
@@ -826,24 +848,18 @@ export default function LeadFinder() {
                                                 <span className="h-[1px] w-4 bg-brand/50"></span>
                                                 <span className="text-sm sm:text-[12px] font-black uppercase tracking-[0.3em] text-brand/80">Business Intelligence</span>
                                             </div>
-                                            <h2 className="text-2xl sm:text-3xl font-heading uppercase leading-tight pr-10">{drawerLead.name}</h2>
-                                            <div className="flex items-center text-zinc-400 text-[10.5px] sm:text-[11.5px] font-bold uppercase tracking-wider gap-x-2 sm:gap-x-4 mt-2 sm:mt-3 whitespace-nowrap">
-                                                <span className="flex items-center gap-2"><MapPin className="h-4 w-4 text-brand" /> {drawerLead.city}</span>
-                                                {drawerLead.niche && <span className="flex items-center gap-2"><Building2 className="h-4 w-4 text-brand" />{drawerLead.niche}</span>}
-                                                {drawerLead.website && (
-                                                    <a href={drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-zinc-300 hover:text-brand transition-colors cursor-pointer group">
-                                                        <Globe className="h-4 w-4 text-brand group-hover:scale-110 transition-transform" />
-                                                        <span className="border-b border-transparent group-hover:border-brand/50 lowercase tracking-normal">{drawerLead.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')}</span>
-                                                    </a>
-                                                )}
-                                                <div className="flex items-center gap-3 sm:gap-4 sm:border-l border-zinc-800 sm:pl-4 sm:ml-1 shrink-0">
+                                            <h2 className="text-2xl sm:text-3xl font-heading uppercase leading-tight pr-12">{drawerLead.name}</h2>
+                                            <div className="flex flex-wrap items-center text-zinc-400 text-[10.5px] sm:text-[11.5px] font-bold uppercase tracking-wider gap-x-4 gap-y-3 mt-3 sm:mt-4">
+                                                <span className="flex items-center gap-2 bg-zinc-900/50 px-2 py-1 rounded-md border border-zinc-800/50"><MapPin className="h-4 w-4 text-brand" /> {drawerLead.city}</span>
+                                                {drawerLead.niche && <span className="flex items-center gap-2 bg-zinc-900/50 px-2 py-1 rounded-md border border-zinc-800/50"><Building2 className="h-4 w-4 text-brand" />{drawerLead.niche}</span>}
+                                                <div className="flex flex-wrap items-center gap-4 lg:border-l border-zinc-800 lg:pl-4 lg:ml-1 shrink-0">
                                                     <div className="flex items-baseline gap-2 py-1 group/rating">
                                                         <Star className="h-4 w-4 text-brand fill-brand shrink-0" />
                                                         <span className="text-xl sm:text-2xl font-black text-brand italic tracking-tighter leading-none">{drawerLead.rating}</span>
                                                         <span className="text-sm sm:text-[12px] text-zinc-500 font-bold uppercase tracking-widest leading-none">({drawerLead.ratingCount} reviews)</span>
                                                     </div>
 
-                                                    <div className="flex items-center gap-3 py-1 sm:ml-2 border-l border-zinc-800/50 pl-4 sm:pl-8 group/score">
+                                                    <div className="flex items-center gap-3 py-1 lg:ml-2 border-l border-zinc-800/50 pl-4 lg:pl-8 group/score">
                                                         <Activity className="h-5 w-5 text-emerald-400 shrink-0" />
                                                         <div className="flex items-baseline gap-2">
                                                             <span className="text-xs sm:text-sm font-black text-zinc-500 uppercase tracking-[0.2em] leading-none">SCORE:</span>
@@ -858,24 +874,33 @@ export default function LeadFinder() {
                                     </div>
 
                                     {/* Tabs Navigation */}
-                                    <div className="px-4 sm:px-6 py-3 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center shrink-0 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                                        <TabsList className="bg-zinc-900 border border-zinc-800 h-10 p-1 shrink-0 flex-nowrap min-w-max">
-                                            <TabsTrigger value="intel" className="px-8 py-2 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
-                                                <div className="flex items-center gap-3">
+                                    <div className="px-4 sm:px-6 py-4 border-b border-zinc-800/60 bg-zinc-950/40 flex items-center shrink-0 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                                        <TabsList className="bg-transparent h-auto p-0 flex gap-3 shrink-0 flex-nowrap min-w-max">
+                                            <TabsTrigger 
+                                                value="intel" 
+                                                className="px-6 py-2 rounded-full border-2 border-zinc-700/80 bg-zinc-900/50 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500/80 data-active:bg-brand data-active:text-white data-active:border-brand transition-all shadow-lg shadow-black/20"
+                                            >
+                                                <div className="flex items-center gap-2.5">
                                                     <Globe className="h-4 w-4" />
-                                                    <span className="text-[12px] font-black uppercase tracking-[0.15em]">Business Intel</span>
+                                                    <span className="text-[11px] font-black uppercase tracking-[0.1em]">Business Intel</span>
                                                 </div>
                                             </TabsTrigger>
-                                            <TabsTrigger value="audit" className="px-8 py-2 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
-                                                <div className="flex items-center gap-3">
+                                            <TabsTrigger 
+                                                value="audit" 
+                                                className="px-6 py-2 rounded-full border-2 border-zinc-700/80 bg-zinc-900/50 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500/80 data-active:bg-brand data-active:text-white data-active:border-brand transition-all shadow-lg shadow-black/20"
+                                            >
+                                                <div className="flex items-center gap-2.5">
                                                     <Activity className="h-4 w-4" />
-                                                    <span className="text-[12px] font-black uppercase tracking-[0.15em]">Audit Breakdown</span>
+                                                    <span className="text-[11px] font-black uppercase tracking-[0.1em]">Audit Breakdown</span>
                                                 </div>
                                             </TabsTrigger>
-                                            <TabsTrigger value="outreach" className="px-8 py-2 text-zinc-500 hover:text-zinc-300 data-active:bg-zinc-100 data-active:text-zinc-950 transition-all">
-                                                <div className="flex items-center gap-3">
+                                            <TabsTrigger 
+                                                value="outreach" 
+                                                className="px-6 py-2 rounded-full border-2 border-zinc-700/80 bg-zinc-900/50 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500/80 data-active:bg-brand data-active:text-white data-active:border-brand transition-all shadow-lg shadow-black/20"
+                                            >
+                                                <div className="flex items-center gap-2.5">
                                                     <Send className="h-4 w-4" />
-                                                    <span className="text-[12px] font-black uppercase tracking-[0.15em]">Outreach</span>
+                                                    <span className="text-[11px] font-black uppercase tracking-[0.1em]">Outreach</span>
                                                 </div>
                                             </TabsTrigger>
                                         </TabsList>
@@ -898,17 +923,30 @@ export default function LeadFinder() {
                                                             Run a 1-click SEO Audit to uncover technical gaps, hidden contacts, and pixel data.
                                                         </p>
                                                     </div>
-                                                    <Button
-                                                        onClick={() => handleRunAudit(drawerLead)}
-                                                        disabled={isAuditing[drawerLead.id]}
-                                                        className="bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 hover:border-brand/40 font-black uppercase tracking-widest text-xs h-11 px-8 rounded-xl shadow-sm active:scale-95 transition-all"
-                                                    >
-                                                        {isAuditing[drawerLead.id] ? (
-                                                            <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> Deep Auditing...</>
-                                                        ) : (
-                                                            <><Terminal className="h-3.5 w-3.5 mr-2" /> Run Site Audit</>
+                                                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                                                        <Button
+                                                            onClick={() => handleRunAudit(drawerLead)}
+                                                            disabled={isAuditing[drawerLead.id]}
+                                                            className="bg-brand/10 hover:bg-brand/20 text-brand border border-brand/20 hover:border-brand/40 font-black uppercase tracking-widest text-xs h-11 px-8 rounded-xl shadow-sm active:scale-95 transition-all"
+                                                        >
+                                                            {isAuditing[drawerLead.id] ? (
+                                                                <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> Deep Auditing...</>
+                                                            ) : (
+                                                                <><Terminal className="h-3.5 w-3.5 mr-2" /> Run Site Audit</>
+                                                            )}
+                                                        </Button>
+
+                                                        {drawerLead.website && (
+                                                            <Button
+                                                                variant="outline"
+                                                                onClick={() => window.open(drawerLead.website.startsWith('http') ? drawerLead.website : `https://${drawerLead.website}`, '_blank')}
+                                                                className="h-11 px-6 rounded-xl border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-white hover:border-zinc-700 font-bold uppercase tracking-widest text-[10px] transition-all"
+                                                            >
+                                                                <Globe className="h-3.5 w-3.5 mr-2 text-zinc-500" />
+                                                                Visit Website
+                                                            </Button>
                                                         )}
-                                                    </Button>
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 <>
