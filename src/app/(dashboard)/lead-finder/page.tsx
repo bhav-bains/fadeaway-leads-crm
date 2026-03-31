@@ -321,47 +321,9 @@ export default function LeadFinder() {
             if (auditData) {
                 setAuditedLeads(prev => ({ ...prev, [lead.id]: auditData }));
 
-                if (auditData.companyId && lead.website) {
-                    fetchAndSavePageSpeed(auditData.companyId, lead.website).then(res => {
-                        setAuditedLeads(prev => {
-                            const current = prev[lead.id];
-                            if (!current) return prev;
-                            const newAudit = {
-                                ...current,
-                                score: res?.newScore?.total ?? current.score,
-                                rawScrape: {
-                                    ...current.rawScrape,
-                                    totalScore: res?.newScore?.total ?? current.rawScrape?.totalScore,
-                                    scoreBreakdown: res?.newScore || current.rawScrape?.scoreBreakdown,
-                                    seoAudit: {
-                                        ...current.rawScrape?.seoAudit,
-                                        pagespeed_mobile: res?.success ? res.pagespeed_mobile : null,
-                                        pagespeed_desktop: res?.success ? res.pagespeed_desktop : null,
-                                        mobile_load_time: res?.success ? res.mobile_load_time : null,
-                                    }
-                                }
-                            };
-                            return { ...prev, [lead.id]: newAudit };
-                        });
-                    }).catch(() => {
-                        setAuditedLeads(prev => {
-                            const current = prev[lead.id];
-                            if (!current) return prev;
-                            const newAudit = {
-                                ...current,
-                                rawScrape: {
-                                    ...current.rawScrape,
-                                    seoAudit: {
-                                        ...current.rawScrape?.seoAudit,
-                                        pagespeed_mobile: null,
-                                        pagespeed_desktop: null
-                                    }
-                                }
-                            };
-                            return { ...prev, [lead.id]: newAudit };
-                        });
-                    });
-                }
+            if (auditData) {
+                setAuditedLeads(prev => ({ ...prev, [lead.id]: auditData }));
+            }
             }
         }
         toast.success("Bulk audit complete!");
@@ -828,7 +790,44 @@ export default function LeadFinder() {
 
                         return (
                             <div className="flex flex-col h-full bg-transparent text-zinc-100 w-full overflow-hidden focus-visible:outline-none relative">
-                                <Tabs defaultValue="intel" className="flex flex-col h-full">
+                                <Tabs 
+                                    defaultValue="intel" 
+                                    className="flex flex-col h-full"
+                                    onValueChange={(val) => {
+                                        if (val === 'outreach' && audit?.rawScrape?.seoAudit?.pagespeed_mobile === null && drawerLead?.website) {
+                                            const companyId = audit.companyId || drawerLead.companyId;
+                                            if (companyId) {
+                                                console.log(`[LeadFinder] JIT PageSpeed Triggered for ${drawerLead.name}`);
+                                                fetchAndSavePageSpeed(companyId, drawerLead.website).then(res => {
+                                                    if (res?.success) {
+                                                        setAuditedLeads(prev => {
+                                                            const current = prev[drawerLead.id];
+                                                            if (!current) return prev;
+                                                            return {
+                                                                ...prev,
+                                                                [drawerLead.id]: {
+                                                                    ...current,
+                                                                    score: res.newScore?.total ?? current.score,
+                                                                    rawScrape: {
+                                                                        ...current.rawScrape,
+                                                                        totalScore: res.newScore?.total ?? current.rawScrape?.totalScore,
+                                                                        scoreBreakdown: res.newScore || current.rawScrape?.scoreBreakdown,
+                                                                        seoAudit: {
+                                                                            ...current.rawScrape?.seoAudit,
+                                                                            pagespeed_mobile: res.pagespeed_mobile,
+                                                                            pagespeed_desktop: res.pagespeed_desktop,
+                                                                            mobile_load_time: res.mobile_load_time,
+                                                                        }
+                                                                    }
+                                                                }
+                                                            };
+                                                        });
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }}
+                                >
                                     {/* Header */}
                                     <div className="px-4 sm:px-6 pt-6 pb-4 border-b border-zinc-700/80 shrink-0 bg-transparent relative overflow-hidden">
                                         <div className="absolute top-0 right-0 p-4 opacity-[0.05]">

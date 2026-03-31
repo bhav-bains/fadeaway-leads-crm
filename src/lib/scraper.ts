@@ -470,63 +470,49 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
     const rulesTriggered: string[] = [];
 
     // ============================
-    // CATEGORY 1: UX Decay & Technical Failure (Max 30 or 45)
+    // CATEGORY 1: UX Decay & Technical Failure (Max 45) - Instant (Cheerio Only)
     // ============================
-    let uxDecayTechnical = 0; // Accumulate penalty points for decay/gaps
-    const hasSpeedData = google.mobilePerformance !== undefined && google.mobilePerformance !== null;
-    const uxMax = hasSpeedData ? 45 : 30;
-    const maxTotal = hasSpeedData ? 100 : 85;
+    let uxDecayTechnical = 0; 
+    const uxMax = 45;
+    const maxTotal = 100;
 
-    // 1. PageSpeed (0-50: 15pts, 51-80: 10pts, 81-90: 5pts, 91-100: 0pts)
-    let speedPenalty = 0;
-    const mobileScore = google.mobilePerformance ?? 100;
-    const desktopScore = google.desktopPerformance ?? 100;
+    // 1. PageSpeed (Informational Only - Not in 100-pt total)
+    const mobileScore = google.mobilePerformance ?? null;
+    const hasSpeedData = mobileScore !== null;
     
     if (hasSpeedData) {
+        let speedPenalty = 0;
         if (mobileScore <= 50) speedPenalty = 15;
         else if (mobileScore <= 80) speedPenalty = 10;
         else if (mobileScore <= 90) speedPenalty = 5;
-        else speedPenalty = 0;
+        
+        const speedMsg = `Mobile Speed: ${mobileScore}/100`;
+        uxRules.push({ 
+            label: speedMsg, 
+            points: 0, // 0 points for the core total
+            isTriggered: speedPenalty > 0 
+        });
+    } else {
+        uxRules.push({ 
+            label: "PageSpeed Insights (Fetching...)", 
+            points: 0, 
+            isTriggered: true 
+        });
     }
 
-    const isSpeedFail = speedPenalty > 0;
-    const speedMsg = hasSpeedData 
-        ? `Mobile Speed: ${mobileScore}/100 (-${speedPenalty} points)` 
-        : `PageSpeed Insights (Fetching...)`;
-    
-    uxRules.push({ 
-        label: speedMsg, 
-        points: speedPenalty, 
-        isTriggered: isSpeedFail || !hasSpeedData 
-    });
-
-    if (isSpeedFail) {
-        uxDecayTechnical += speedPenalty;
-        rulesTriggered.push(`${speedMsg} (+${speedPenalty} pts)`);
-    }
-
-    // 2. SEO Fundamentals (H1/Title/Meta - Max 10 penalty)
+    // 2. SEO Fundamentals (Max 15 Penalty)
     let seoPenalty = 0;
     
-    // H1
+    // H1 (Penalty 10)
     const isH1Fail = data.seo.h1Tags.count === 0 || data.seo.h1Tags.count > 1;
-    if (isH1Fail) seoPenalty += 5;
+    if (isH1Fail) seoPenalty += 10;
     uxRules.push({ 
         label: `H1 Tag Structure (${data.seo.h1Tags.count} found)`, 
-        points: isH1Fail ? 5 : 0, 
+        points: isH1Fail ? 10 : 0, 
         isTriggered: isH1Fail 
     });
-
-    // Title
-    const isTitleFail = data.seo.titleTag.isEmpty;
-    if (isTitleFail) seoPenalty += 5;
-    uxRules.push({ 
-        label: isTitleFail ? 'Meta Title Missing' : 'Meta Title Optimized', 
-        points: isTitleFail ? 5 : 0, 
-        isTriggered: isTitleFail 
-    });
-
-    // Meta Description
+    
+    // Meta Description (Penalty 5)
     const isMetaFail = !data.seo.metaDescription.exists;
     if (isMetaFail) seoPenalty += 5;
     uxRules.push({ 
@@ -534,13 +520,22 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
         points: isMetaFail ? 5 : 0, 
         isTriggered: isMetaFail 
     });
+    
+    uxDecayTechnical += seoPenalty;
 
-    uxDecayTechnical += Math.min(seoPenalty, 10);
-
-    // 3. Structural & AI (Max 10 penalty)
+    // 3. Structural & AI Search (Max 15 Penalty)
     let structuralPenalty = 0;
     
-    // Schema
+    // Content Depth (Penalty 10)
+    const isContentFail = data.seo.revenuePagesCount <= 1 || data.seo.isSinglePage;
+    if (isContentFail) structuralPenalty += 10;
+    uxRules.push({ 
+        label: data.seo.isSinglePage ? 'Single Page Site Structure' : 'Thin Service Content', 
+        points: isContentFail ? 10 : 0, 
+        isTriggered: isContentFail 
+    });
+    
+    // Schema (Penalty 5)
     const isSchemaFail = !data.seo.hasSchemaMarkup;
     if (isSchemaFail) structuralPenalty += 5;
     uxRules.push({ 
@@ -548,49 +543,32 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
         points: isSchemaFail ? 5 : 0, 
         isTriggered: isSchemaFail 
     });
+    
+    uxDecayTechnical += structuralPenalty;
 
-    // Content Depth
-    const isContentFail = data.seo.revenuePagesCount <= 1 || data.seo.isSinglePage;
-    if (isContentFail) structuralPenalty += 5;
-    uxRules.push({ 
-        label: data.seo.isSinglePage ? 'Single Page Site Structure' : 'Thin Service Content', 
-        points: isContentFail ? 5 : 0, 
-        isTriggered: isContentFail 
-    });
-
-    uxDecayTechnical += Math.min(structuralPenalty, 10);
-
-    // 6. Conversion (Booking)
+    // 4. Conversion Friction (Max 15 Penalty)
+    let conversionPenalty = 0;
+    
+    // Booking & CTA Keywords (Penalty 10)
     const hasBooking = data.ctas.bookingUrls.length > 0;
-    const isBookingFail = !hasBooking;
-    const bookingPoints = isBookingFail ? 5 : 0;
-    const bookingMsg = 'Online Booking/Scheduling System';
-    uxRules.push({ label: bookingMsg, points: bookingPoints, isTriggered: isBookingFail });
-    if (isBookingFail) {
-        uxDecayTechnical += bookingPoints;
-        rulesTriggered.push(`${bookingMsg} (+${bookingPoints} pts)`);
-    }
-
-    // 7. Conversion (CTA Polish)
-    const isCtaFail = !data.ctas.hasGeneralCTA;
-    const ctaPoints = isCtaFail ? 5 : 0;
-    const ctaMsg = 'Conversion-Focused CTA Keywords';
-    uxRules.push({ label: ctaMsg, points: ctaPoints, isTriggered: isCtaFail });
-    if (isCtaFail) {
-        uxDecayTechnical += ctaPoints;
-        rulesTriggered.push(`${ctaMsg} (+${ctaPoints} pts)`);
-    }
-
-    // 8. Conversion (Trust Signals)
+    const isCtaFail = !data.ctas.hasGeneralCTA || !hasBooking;
+    if (isCtaFail) conversionPenalty += 10;
+    uxRules.push({ 
+        label: 'CTA & Booking Friction', 
+        points: isCtaFail ? 10 : 0, 
+        isTriggered: isCtaFail 
+    });
+    
+    // Trust Signals (Penalty 5)
     const isTrustFail = !data.ctas.hasReviewWidget || !data.seo.hasOgImage;
-    const trustPoints = isTrustFail ? 5 : 0;
-    const trustMsg = !data.ctas.hasReviewWidget ? 'Customer Review Widget' : 'Social OG Image Tags';
-    uxRules.push({ label: isTrustFail ? trustMsg : 'Verified Trust Signals', points: trustPoints, isTriggered: isTrustFail });
-    if (isTrustFail) {
-        uxDecayTechnical += trustPoints;
-        rulesTriggered.push(`${trustMsg} (+${trustPoints} pts)`);
-    }
-
+    if (isTrustFail) conversionPenalty += 5;
+    uxRules.push({ 
+        label: 'Review Widget & OG Image', 
+        points: isTrustFail ? 5 : 0, 
+        isTriggered: isTrustFail 
+    });
+    
+    uxDecayTechnical += conversionPenalty;
     uxDecayTechnical = Math.min(uxDecayTechnical, uxMax);
 
     // ============================
@@ -605,7 +583,6 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
     maturityRules.push({ label: hasAds ? adsMsg : 'No Active Paid Ads Found', points: adsPoints, isTriggered: hasAds });
     if (hasAds) {
         cashFlowMaturity += adsPoints;
-        rulesTriggered.push(`${adsMsg} (+${adsPoints})`);
     }
 
     // 2. Review Maturity
@@ -615,7 +592,6 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
     maturityRules.push({ label: matureMsg, points: maturePoints, isTriggered: isMature });
     if (isMature) {
         cashFlowMaturity += maturePoints;
-        rulesTriggered.push(`${matureMsg} (+${maturePoints})`);
     }
 
     // 3. Growth Tracking
@@ -625,7 +601,6 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
     maturityRules.push({ label: growthMsg, points: growthPoints, isTriggered: isGrowth });
     if (isGrowth) {
         cashFlowMaturity += growthPoints;
-        rulesTriggered.push(`${growthMsg} (+${growthPoints})`);
     }
 
     cashFlowMaturity = Math.min(cashFlowMaturity, 30);
@@ -642,12 +617,10 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
         contactability += 20;
         const msg = 'Direct Owner/Personal Email Access';
         contactRules.push({ label: msg, points: 20, isTriggered: true });
-        rulesTriggered.push(`${msg} (+20)`);
     } else if (genericEmails.length > 0) {
         contactability += 10;
         const msg = 'Generic Business Email (Gatekeeper)';
         contactRules.push({ label: msg, points: 10, isTriggered: true });
-        rulesTriggered.push(`${msg} (+10)`);
     } else {
         contactRules.push({ label: 'No Valid Email Contacts Found', points: 0, isTriggered: false });
     }
@@ -660,7 +633,6 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
         contactability += points;
         const msg = isContactForm ? 'Direct Web Inquiry Form' : 'Social Media Intake Channels';
         contactRules.push({ label: msg, points: 5, isTriggered: true });
-        rulesTriggered.push(`${msg} (+5)`);
     } else {
         contactRules.push({ label: 'Secondary Contact Channels Missing', points: 0, isTriggered: false });
     }
@@ -669,14 +641,15 @@ export function calculateLeadScore(data: EnrichmentData, google: GoogleData): Sc
 
     const total_score = uxDecayTechnical + cashFlowMaturity + contactability;
 
+    // Rules Triggered for Biggest Weakness (Prioritizing Category 1)
     uxRules.forEach(r => {
-        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label} (+${r.points})`);
+        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label}`);
     });
     maturityRules.forEach(r => {
-        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label} (+${r.points})`);
+        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label}`);
     });
     contactRules.forEach(r => {
-        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label} (+${r.points})`);
+        if (r.isTriggered && r.points > 0) rulesTriggered.push(`${r.label}`);
     });
 
     return {

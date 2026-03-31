@@ -285,39 +285,16 @@ export async function runLocalSeoAudit(
             }
         }
 
-        // PARALLEL EXECUTION: Scrape Website AND Fetch PageSpeed simultaneously
-        const [scrape, pagespeed] = await Promise.all([
-            scrapeWebsite(
-                urlToScrape, 
-                city, 
-                niche, 
-                leadMeta?.reviewCount || 0, 
-                0, // reviewAvg fallback
-                existingAudit?.pagespeed_mobile, // Optional: use existing if new fails
-                existingAudit?.pagespeed_desktop
-            ),
-            fetchPageSpeedMetrics(urlToScrape)
-        ]);
-
-        // If newly fetched PageSpeed is available, recalculate the 100-pt score immediately
-        if (pagespeed && !('error' in pagespeed)) {
-            const finalScore = calculateLeadScore(scrape.enrichment, {
-                url: website,
-                reviewCount: leadMeta?.reviewCount || 0,
-                reviewAvg: 0,
-                mobilePerformance: pagespeed.pagespeed_mobile,
-                desktopPerformance: pagespeed.pagespeed_desktop
-            });
-
-            // Update scrape result with final 100pt scores before saving
-            scrape.scoreBreakdown = finalScore;
-            scrape.totalScore = finalScore.total;
-            scrape.seoAudit = {
-                ...scrape.seoAudit,
-                pagespeed_mobile: pagespeed.pagespeed_mobile,
-                pagespeed_desktop: pagespeed.pagespeed_desktop
-            };
-        }
+        // Instant Audit: Scrape Website only (Cheerio)
+        const scrape = await scrapeWebsite(
+            urlToScrape, 
+            city, 
+            niche, 
+            leadMeta?.reviewCount || 0, 
+            0, // reviewAvg fallback
+            null,
+            null
+        );
 
         let finalCompanyId: string | undefined;
 
