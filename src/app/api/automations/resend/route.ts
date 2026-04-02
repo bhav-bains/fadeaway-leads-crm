@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { parseEmailTemplate } from '@/lib/outreach';
+import { buildOutreachHtml } from '@/lib/email-template';
 
 export async function POST(req: Request) {
     const supabase = await createClient();
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
 
     const { data: profile } = await supabase
         .from('profiles')
-        .select('workspace_id')
+        .select('workspace_id, from_email, full_name, title, signature_url')
         .eq('id', user.id)
         .single();
 
@@ -21,7 +22,34 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "No workspace found" }, { status: 400 });
     }
 
-    // 2. Parse request body
+    // 2. Resolve "from" address from user profile + validate against workspace domain
+    const { data: settings } = await supabase
+        .from('settings')
+        .select('sending_domain')
+        .eq('workspace_id', profile.workspace_id)
+        .single();
+
+    const senderEmail = profile.from_email;
+    if (!senderEmail) {
+        return NextResponse.json({ error: "No sending email configured on your profile. Go to Settings to set it up." }, { status: 400 });
+    }
+
+    // Domain enforcement: if workspace has a sending_domain set, validate the user's from_email matches
+    if (settings?.sending_domain) {
+        const emailDomain = senderEmail.split('@')[1]?.toLowerCase();
+        const allowedDomain = settings.sending_domain.toLowerCase();
+        if (emailDomain !== allowedDomain) {
+            return NextResponse.json({ 
+                error: `Your from_email domain "${emailDomain}" does not match the workspace's allowed sending domain "${allowedDomain}".` 
+            }, { status: 403 });
+        }
+    }
+
+    const fromDisplay = profile.full_name 
+        ? `${profile.full_name} <${senderEmail}>` 
+        : senderEmail;
+
+    // 3. Parse request body
     const { companyId, contactEmail, sequenceName, subject, rawBodyTemplate } = await req.json();
 
     if (!companyId || !contactEmail || !sequenceName || !subject || !rawBodyTemplate) {
@@ -29,10 +57,17 @@ export async function POST(req: Request) {
     }
 
     try {
-        // 3. Token Parser Logic
+        // 4. Token Parser Logic
         const parsedBody = await parseEmailTemplate(rawBodyTemplate, companyId, profile.workspace_id);
 
-        // 4. Send Email via Resend
+        // 4b. Build HTML email with branded signature
+        const htmlBody = buildOutreachHtml(parsedBody, {
+            fullName: profile.full_name || senderEmail.split('@')[0],
+            title: profile.title || undefined,
+            signatureUrl: profile.signature_url || undefined
+        });
+
+        // 5. Send Email via Resend
         let resendId = `sim_${Date.now()}`;
         const DISABLE_EMAIL_SEND = false; 
 
@@ -44,10 +79,11 @@ export async function POST(req: Request) {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-                    to: ['bhav@fadeawaycreatives.com'], 
-                    subject: `[TEST] ${subject}`,
-                    text: parsedBody 
+                    from: fromDisplay,
+                    to: [contactEmail], 
+                    subject: subject,
+                    html: htmlBody,
+                    text: parsedBody
                 })
             });
 
@@ -62,7 +98,7 @@ export async function POST(req: Request) {
             console.log(`[Email Simulated] Subject: ${subject}`);
         }
 
-        // 5. Save Engagement History
+        // 6. Save Engagement History
         await supabase.from('outreach_messages').insert([{
             company_id: companyId,
             sequence_name: sequenceName,
@@ -71,6 +107,7 @@ export async function POST(req: Request) {
             body: parsedBody,
             sent_at: new Date().toISOString(),
             status: 'sent',
+            resend_id: resendId,
             open_count: 0,
             click_count: 0,
             reply_flag: false

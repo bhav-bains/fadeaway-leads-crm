@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { X, Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram, Facebook, Activity, Code2, Terminal, Clock, Link as LinkIcon, TrendingUp, Phone, MessageSquare, Users, PenLine, Save, Wand2, Sparkles, Loader2, Star, Smartphone, Monitor, RefreshCw, Briefcase, CheckSquare } from "lucide-react";
+import { X, Search, MapPin, Building2, Download, Send, AlertCircle, ExternalLink, ChevronDown, ChevronRight, Mail, Globe, CheckCircle2, XCircle, Eye, Instagram, Facebook, Activity, Code2, Terminal, Clock, Link as LinkIcon, TrendingUp, Phone, MessageSquare, Users, PenLine, Save, Wand2, Sparkles, Loader2, Star, Smartphone, Monitor, RefreshCw, Briefcase, CheckSquare, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useLeadStore, Lead } from "@/store/leadStore";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -89,6 +89,7 @@ export default function LeadFinder() {
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [aiSuggestions, setAiSuggestions] = useState<any>(null);
     const [isSendingEmail, setIsSendingEmail] = useState(false);
+    const [sendToEmail, setSendToEmail] = useState('');
     const [activeReachoutTab, setActiveReachoutTab] = useState('email');
     const [activeTemplateId, setActiveTemplateId] = useState('bhav');
     const [outreachMethod, setOutreachMethod] = useState<'ai' | 'static'>('ai');
@@ -1629,6 +1630,7 @@ export default function LeadFinder() {
                                                                     }, activeTemplateId);
                                                                     if (res.error) throw new Error(res.error);
                                                                     setAiSuggestions(res.data);
+                                                                    setSendToEmail(audit?.email || drawerLead?.email || '');
                                                                 } catch (e: any) {
                                                                     toast.error(e.message || "Failed to generate pitch");
                                                                 } finally {
@@ -1673,6 +1675,7 @@ export default function LeadFinder() {
                                                                                 keyFindings: ["Manual template selection", "Direct outreach strategy"],
                                                                                 painPoints: ["Scaling technical debt", "Mobile friction"]
                                                                             });
+                                                                            setSendToEmail(audit?.email || drawerLead?.email || '');
                                                                         }}
                                                                         className="w-full p-3 bg-zinc-900/40 border border-zinc-800 rounded-xl text-left hover:bg-zinc-800/60 hover:border-zinc-700 transition-all group"
                                                                     >
@@ -1690,18 +1693,24 @@ export default function LeadFinder() {
                                         </div>
                                         {aiSuggestions && (
                                             <div className="p-4 sm:p-5 bg-zinc-950 border-t border-zinc-800/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0 shadow-[0_-20px_40px_rgba(0,0,0,0.5)]">
-                                                <div className="flex flex-col px-2 w-full sm:w-auto min-w-0">
-                                                    <span className="text-[11px] text-zinc-500 font-black uppercase tracking-widest mb-0.5">To:</span>
-                                                    <span className="text-sm text-zinc-200 font-black uppercase tracking-widest truncate">{audit?.email || drawerLead?.email || 'No email found'}</span>
+                                                <div className="flex flex-col px-2 w-full sm:flex-1 min-w-0">
+                                                    <label className="text-[11px] text-zinc-500 font-black uppercase tracking-widest mb-1">Send To:</label>
+                                                    <Input
+                                                        type="email"
+                                                        placeholder="recipient@company.com"
+                                                        value={sendToEmail}
+                                                        onChange={(e) => setSendToEmail(e.target.value)}
+                                                        className="h-9 text-sm bg-zinc-900 border-zinc-700 text-zinc-100 rounded-lg focus:border-brand/50 focus:ring-brand/20 font-bold tracking-wide"
+                                                    />
                                                 </div>
                                                 <div className="flex gap-3 mt-2 sm:mt-0 w-full sm:w-auto">
                                                     <Button variant="outline" onClick={() => setAiSuggestions(null)} className="flex-1 sm:flex-none h-11 px-4 sm:px-6 rounded-xl border-zinc-800 text-zinc-400 hover:bg-zinc-800 font-bold uppercase tracking-widest text-xs">Discard</Button>
                                                     {activeReachoutTab === 'email' ? (
                                                         <Button
                                                             className="flex-1 sm:flex-none h-11 px-4 sm:px-7 font-black text-brand bg-brand/10 hover:bg-brand/20 border border-brand/20 hover:border-brand/40 shadow-sm rounded-xl transition-all uppercase tracking-widest text-sm"
-                                                            disabled={isSendingEmail || (!audit?.email && !drawerLead?.email)}
+                                                            disabled={isSendingEmail || !sendToEmail.trim()}
                                                             onClick={async () => {
-                                                                const emailToSend = audit?.email || drawerLead?.email;
+                                                                const emailToSend = sendToEmail.trim();
                                                                 const companyId = drawerLead.companyId || audit?.companyId;
 
                                                                 if (!emailToSend || !companyId) {
@@ -1749,15 +1758,41 @@ export default function LeadFinder() {
                                                             )}
                                                         </Button>
                                                     ) : (
+                                                        <>
                                                         <Button
                                                             className="flex-1 sm:flex-none h-11 px-4 sm:px-7 font-black text-zinc-950 bg-brand hover:bg-brand/90 shadow-[0_0_20px_rgba(255,107,0,0.15)] rounded-xl border-0 transition-all uppercase tracking-widest text-sm"
-                                                            onClick={async () => {
+                                                            onClick={() => {
                                                                 navigator.clipboard.writeText(aiSuggestions.dmBody);
                                                                 toast.success("DM copied to clipboard!");
                                                             }}
                                                         >
                                                             <Download className="h-4 w-4 mr-2" /> Copy DM
                                                         </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            className={`flex-1 sm:flex-none h-11 px-4 sm:px-6 rounded-xl font-bold uppercase tracking-widest text-xs transition-all ${
+                                                                results.find(r => r.id === drawerLead?.id)?.status === 'Contacted'
+                                                                    ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10 hover:bg-zinc-800 hover:text-zinc-300 hover:border-zinc-600'
+                                                                    : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600'
+                                                            }`}
+                                                            onClick={async () => {
+                                                                const companyId = drawerLead.companyId || audit?.companyId;
+                                                                if (!companyId) return;
+                                                                const isContacted = results.find(r => r.id === drawerLead?.id)?.status === 'Contacted';
+                                                                const newStatus = isContacted ? 'New' : 'Contacted';
+                                                                await updateLeadStatus(companyId, newStatus);
+                                                                setResults(prev => prev.map(r =>
+                                                                    r.id === (drawerLead?.id || '') ? { ...r, status: newStatus } : r
+                                                                ));
+                                                                toast.success(isContacted ? "Lead marked as uncontacted." : "Lead marked as Contacted!");
+                                                            }}
+                                                        >
+                                                            {results.find(r => r.id === drawerLead?.id)?.status === 'Contacted'
+                                                                ? <><CheckCircle2 className="h-4 w-4 mr-2" /> Contacted</>
+                                                                : <><UserCheck className="h-4 w-4 mr-2" /> Mark Contacted</>
+                                                            }
+                                                        </Button>
+                                                        </>
                                                     )}
                                                 </div>
                                             </div>

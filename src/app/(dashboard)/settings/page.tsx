@@ -6,12 +6,25 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, AlertCircle, Mail, Shield, PenLine, Link } from "lucide-react";
 import { getConfigStatus } from "@/app/actions/config";
+import { getOutreachSettings, updateFromEmail, updateSendingDomain, updateSignatureInfo } from "@/app/actions/outreach-settings";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
     const [config, setConfig] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Email Sending Config
+    const [fromEmail, setFromEmail] = useState('');
+    const [sendingDomain, setSendingDomain] = useState('');
+    const [isSavingFrom, setIsSavingFrom] = useState(false);
+    const [isSavingDomain, setIsSavingDomain] = useState(false);
+
+    // Signature Config
+    const [sigTitle, setSigTitle] = useState('');
+    const [sigUrl, setSigUrl] = useState('');
+    const [isSavingSig, setIsSavingSig] = useState(false);
 
     useEffect(() => {
         async function checkConfig() {
@@ -20,6 +33,17 @@ export default function SettingsPage() {
             setIsLoading(false);
         }
         checkConfig();
+
+        async function loadOutreachSettings() {
+            const result = await getOutreachSettings();
+            if (result.data) {
+                setFromEmail(result.data.from_email);
+                setSendingDomain(result.data.sending_domain);
+                setSigTitle(result.data.title);
+                setSigUrl(result.data.signature_url);
+            }
+        }
+        loadOutreachSettings();
     }, []);
 
     const StatusBadge = ({ isSet }: { isSet: boolean }) => (
@@ -84,6 +108,176 @@ export default function SettingsPage() {
                             </div>
                         </div>
                     )}
+                </CardContent>
+            </Card>
+
+            {/* Email Sending Configuration */}
+            <Card className="border-orange-500/20 bg-orange-500/5 shadow-sm overflow-hidden">
+                <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle className="text-xl flex items-center gap-2">
+                                <Mail className="h-5 w-5 text-orange-500" />
+                                Email Sending Configuration
+                            </CardTitle>
+                            <CardDescription>Configure your outreach sending identity. Each team member sets their own from address.</CardDescription>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Per-User From Email */}
+                    <div className="p-4 bg-background rounded-lg border shadow-sm space-y-3">
+                        <div className="flex items-center gap-2">
+                            <Mail className="h-4 w-4 text-orange-500" />
+                            <Label htmlFor="fromEmail" className="font-bold text-sm">Your Sending Email</Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">This is the "from" address that appears on all emails you send. Must match the workspace sending domain below.</p>
+                        <div className="flex gap-3">
+                            <Input
+                                id="fromEmail"
+                                type="email"
+                                placeholder="you@yourdomain.com"
+                                value={fromEmail}
+                                onChange={(e) => setFromEmail(e.target.value)}
+                                className="flex-1"
+                            />
+                            <Button
+                                variant="outline"
+                                disabled={isSavingFrom}
+                                onClick={async () => {
+                                    if (!fromEmail.trim()) {
+                                        toast.error('Please enter a valid email address.');
+                                        return;
+                                    }
+                                    setIsSavingFrom(true);
+                                    const result = await updateFromEmail(fromEmail.trim());
+                                    if (result.error) {
+                                        toast.error(result.error);
+                                    } else {
+                                        toast.success('Sending email saved!');
+                                    }
+                                    setIsSavingFrom(false);
+                                }}
+                            >
+                                {isSavingFrom ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Workspace Domain Control */}
+                    <div className="p-4 bg-background rounded-lg border shadow-sm space-y-3">
+                        <div className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-orange-500" />
+                            <Label htmlFor="sendingDomain" className="font-bold text-sm">Workspace Sending Domain</Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Only emails from this domain can be used as "from" addresses. Must be verified in your Resend dashboard. Leave blank to allow any domain.</p>
+                        <div className="flex gap-3">
+                            <Input
+                                id="sendingDomain"
+                                type="text"
+                                placeholder="e.g. fadeawaycreatives.ca"
+                                value={sendingDomain}
+                                onChange={(e) => setSendingDomain(e.target.value)}
+                                className="flex-1"
+                            />
+                            <Button
+                                variant="outline"
+                                disabled={isSavingDomain}
+                                onClick={async () => {
+                                    setIsSavingDomain(true);
+                                    const result = await updateSendingDomain(sendingDomain.trim());
+                                    if (result.error) {
+                                        toast.error(result.error);
+                                    } else {
+                                        toast.success('Sending domain saved!');
+                                    }
+                                    setIsSavingDomain(false);
+                                }}
+                            >
+                                {isSavingDomain ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Signature Info */}
+                    <div className="p-4 bg-background rounded-lg border shadow-sm space-y-3">
+                        <div className="flex items-center gap-2">
+                            <PenLine className="h-4 w-4 text-orange-500" />
+                            <Label className="font-bold text-sm">Email Signature</Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Your title and landing page link appear in the branded signature at the bottom of every outreach email.</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="sigTitle" className="text-xs font-semibold text-muted-foreground">Title / Role</Label>
+                                <Input
+                                    id="sigTitle"
+                                    placeholder="e.g. Founder & Creative Head"
+                                    value={sigTitle}
+                                    onChange={(e) => setSigTitle(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="sigUrl" className="text-xs font-semibold text-muted-foreground">Signature Link URL</Label>
+                                <Input
+                                    id="sigUrl"
+                                    type="url"
+                                    placeholder="e.g. https://fadeawaycreatives.com/sports/"
+                                    value={sigUrl}
+                                    onChange={(e) => setSigUrl(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <Button
+                            variant="outline"
+                            disabled={isSavingSig}
+                            className="w-full sm:w-auto"
+                            onClick={async () => {
+                                setIsSavingSig(true);
+                                const result = await updateSignatureInfo(sigTitle.trim(), sigUrl.trim());
+                                if (result.error) {
+                                    toast.error(result.error);
+                                } else {
+                                    toast.success('Signature info saved!');
+                                }
+                                setIsSavingSig(false);
+                            }}
+                        >
+                            {isSavingSig ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <PenLine className="h-4 w-4 mr-2" />}
+                            Save Signature
+                        </Button>
+
+                        {/* Live Preview */}
+                        <div className="mt-4 p-4 bg-white rounded-lg border shadow-inner">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Signature Preview</p>
+                            <div style={{ borderTop: '2px solid #FF4F00', paddingTop: '12px' }}>
+                                <table cellPadding={0} cellSpacing={0}>
+                                    <tbody>
+                                        <tr>
+                                            <td style={{ verticalAlign: 'top', paddingRight: '12px' }}>
+                                                <div style={{ width: '4px', height: '44px', background: '#FF4F00', borderRadius: '2px' }}></div>
+                                            </td>
+                                            <td style={{ verticalAlign: 'top' }}>
+                                                <p style={{ margin: '0 0 2px 0', fontSize: '14px', fontWeight: 700, color: '#1a1a1a', fontFamily: 'Arial,Helvetica,sans-serif' }}>
+                                                    {fromEmail ? fromEmail.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Your Name'}
+                                                </p>
+                                                {sigTitle && (
+                                                    <p style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: 'Arial,Helvetica,sans-serif' }}>
+                                                        {sigTitle}
+                                                    </p>
+                                                )}
+                                                <p style={{ margin: 0, fontSize: '13px', fontFamily: 'Arial,Helvetica,sans-serif' }}>
+                                                    <a href={sigUrl || 'https://fadeawaycreatives.com'} style={{ textDecoration: 'none' }} target="_blank" rel="noreferrer">
+                                                        <span style={{ fontWeight: 700, color: '#FF4F00' }}>FADEAWAY</span>
+                                                        <span style={{ fontWeight: 700, color: '#1a1a1a' }}> CREATIVES</span>
+                                                    </a>
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
 
