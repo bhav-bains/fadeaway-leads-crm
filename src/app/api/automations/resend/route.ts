@@ -12,15 +12,26 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('workspace_id, from_email, full_name, title, signature_url')
+        .select('workspace_id, from_email, full_name')
         .eq('id', user.id)
         .single();
 
-    if (!profile?.workspace_id) {
-        return NextResponse.json({ error: "No workspace found" }, { status: 400 });
+    if (profileError) {
+        console.error('[Resend Route] Profile fetch error:', profileError);
     }
+
+    if (!profile?.workspace_id) {
+        return NextResponse.json({ error: "No workspace found. Make sure your profile is set up." }, { status: 400 });
+    }
+
+    // Fetch optional signature fields separately — graceful fallback if columns don't exist yet
+    const { data: profileExtra } = await supabase
+        .from('profiles')
+        .select('title, signature_url')
+        .eq('id', user.id)
+        .single();
 
     // 2. Resolve "from" address from user profile + validate against workspace domain
     const { data: settings } = await supabase
@@ -63,8 +74,8 @@ export async function POST(req: Request) {
         // 4b. Build HTML email with branded signature
         const htmlBody = buildOutreachHtml(parsedBody, {
             fullName: profile.full_name || senderEmail.split('@')[0],
-            title: profile.title || undefined,
-            signatureUrl: profile.signature_url || undefined
+            title: profileExtra?.title || undefined,
+            signatureUrl: profileExtra?.signature_url || undefined
         });
 
         // 5. Send Email via Resend

@@ -1,9 +1,8 @@
--- Migration: Add signature_url to profiles
+-- Migration: Add signature fields to profiles
 -- Run this in your Supabase SQL Editor
 
 ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS signature_url text;
+ADD COLUMN IF NOT EXISTS title text;
 
--- Seed your users
--- UPDATE public.profiles SET signature_url = 'https://fadeawaycreatives.com/sports/' WHERE full_name ILIKE '%bhav%';
--- UPDATE public.profiles SET signature_url = 'https://fadeawaycreatives.com/wellness/' WHERE full_name ILIKE '%neha%';
+ALTER TABLE public.profiles  
+ADD COLUMN IF NOT EXISTS signature_url text;
