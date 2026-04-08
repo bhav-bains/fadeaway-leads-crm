@@ -26,25 +26,19 @@ export function buildOutreachHtml(body: string, signature: SignatureData): strin
 
     const signatureHtml = `
         <br><br>
-        --<br>
-        ${escapeHtml(signature.fullName)}<br>
-        ${signature.title ? `${escapeHtml(signature.title)}<br>` : ''}
-        <a href="${escapeHtml(linkUrl)}" style="color: #FF4F00; text-decoration: none; font-weight: 500;">Fadeaway Creatives</a>
+        <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #444;">
+            --<br>
+            <strong style="color: #111;">${escapeHtml(signature.fullName || 'Team')}</strong><br>
+            ${signature.title ? `<span style="color: #666;">${escapeHtml(signature.title)}</span><br>` : ''}
+            <a href="${escapeHtml(linkUrl)}" style="color: #FF4F00; text-decoration: none; font-weight: 500;">Fadeaway Creatives</a>
+        </div>
     `;
 
     return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-</head>
-<body style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; margin: 0; padding: 0;">
-    <div style="padding: 16px;">
-        ${escapedBody}
-        ${signatureHtml}
-    </div>
-</body>
-</html>`.trim();
+<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; line-height: 1.5;">
+    ${escapedBody}
+    ${signatureHtml}
+</div>`.trim();
 }
 
 function escapeHtml(str: string): string {
