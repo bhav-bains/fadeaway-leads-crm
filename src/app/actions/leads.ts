@@ -561,6 +561,66 @@ export async function updateLeadStatus(companyId: string, status: string) {
     return { success: true }
 }
 
+export async function logManualOutreach(companyId: string, type: 'Email' | 'Instagram DM', body?: string) {
+    const supabase = await createClient();
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthorized" };
+
+    const sequenceName = type === 'Instagram DM' ? 'Instagram DM' : 'Manual Email';
+
+    const { error: insertError } = await supabase.from('outreach_messages').insert([{
+        company_id: companyId,
+        sequence_name: sequenceName,
+        subject: type === 'Instagram DM' ? 'Instagram DM' : 'Manual Outreach',
+        body: body || '',
+        sent_at: new Date().toISOString(),
+        status: 'sent',
+        step: 1
+    }]);
+
+    if (insertError) return { error: insertError.message };
+
+    // Also update company status to Contacted
+    await supabase.from('companies').update({ status: 'Contacted' }).eq('id', companyId);
+
+    revalidatePath('/lead-finder');
+    revalidatePath('/pipeline');
+    
+    return { success: true };
+}
+
+export async function unlogManualOutreach(companyId: string, type: 'Instagram DM') {
+    const supabase = await createClient();
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthorized" };
+
+    const { error: deleteError } = await supabase
+        .from('outreach_messages')
+        .delete()
+        .eq('company_id', companyId)
+        .eq('sequence_name', type);
+
+    if (deleteError) return { error: deleteError.message };
+
+    // If no more outreach remains, revert status to Audited
+    const { data: remaining } = await supabase
+        .from('outreach_messages')
+        .select('id')
+        .eq('company_id', companyId)
+        .limit(1);
+
+    if (!remaining || remaining.length === 0) {
+        await supabase.from('companies').update({ status: 'Audited' }).eq('id', companyId);
+    }
+
+    revalidatePath('/lead-finder');
+    revalidatePath('/pipeline');
+    
+    return { success: true };
+}
+
 export async function fetchPageSpeedMetrics(website: string) {
     if (!website) return { error: "No website provided" };
     let urlToScrape = website;
