@@ -156,14 +156,7 @@ export async function insertLead(
     if (scrapeResult) {
 
         // 5a. Technical & Performance Refresh (Technical data overrides)
-        if (existingCompany) {
-            await supabase.from('seo_audits').delete().eq('company_id', companyId);
-            await supabase.from('scores').delete().eq('company_id', companyId);
-            // NOTE: We no longer delete contacts and socials here to implement "Sticky Contacts"
-        }
-
-        // Insert fresh SEO Audits
-        await supabase.from('seo_audits').insert([{
+        const seoData = {
             company_id: companyId,
             has_title: scrapeResult.seoAudit?.has_title || false,
             title_len: scrapeResult.seoAudit?.title_len || 0,
@@ -185,10 +178,9 @@ export async function insertLead(
             has_contact_form: scrapeResult.seoAudit?.has_contact_form || false,
             pagespeed_mobile: scrapeResult.seoAudit?.pagespeed_mobile || null,
             pagespeed_desktop: scrapeResult.seoAudit?.pagespeed_desktop || null
-        }]);
+        };
 
-        // Insert fresh Scores
-        await supabase.from('scores').insert([{
+        const scoreData = {
             company_id: companyId,
             score_overall: (scrapeResult as any).scoreBreakdown?.total || 0,
             score_max: (scrapeResult as any).scoreBreakdown?.maxTotal || 85,
@@ -196,7 +188,26 @@ export async function insertLead(
             score_seo: (scrapeResult as any).seoScore || 0,
             score_local_intent: (scrapeResult as any).localIntentScore || 0,
             score_fit: (scrapeResult as any).fitScore || 0
-        }]);
+        };
+
+        // Write fresh SEO Audits & Scores using check-then-act logic to be absolutely bulletproof
+        const { data: existingSeoAudit } = await supabase.from('seo_audits').select('id').eq('company_id', companyId).maybeSingle();
+        if (existingSeoAudit) {
+            const { error } = await supabase.from('seo_audits').update(seoData).eq('company_id', companyId);
+            if (error) console.error("SEO Audit Update Error:", error);
+        } else {
+            const { error } = await supabase.from('seo_audits').insert([seoData]);
+            if (error) console.error("SEO Audit Insert Error:", error);
+        }
+
+        const { data: existingScore } = await supabase.from('scores').select('id').eq('company_id', companyId).maybeSingle();
+        if (existingScore) {
+            const { error } = await supabase.from('scores').update(scoreData).eq('company_id', companyId);
+            if (error) console.error("Score Update Error:", error);
+        } else {
+            const { error } = await supabase.from('scores').insert([scoreData]);
+            if (error) console.error("Score Insert Error:", error);
+        }
 
         // 5d. "Sticky" Contacts & Socials (Additive logic)
         // We only insert ones that don't already exist for this company
@@ -292,8 +303,8 @@ export async function runLocalSeoAudit(
             niche, 
             leadMeta?.reviewCount || 0, 
             0, // reviewAvg fallback
-            null,
-            null
+            existingAudit?.pagespeed_mobile,
+            existingAudit?.pagespeed_desktop
         );
 
         let finalCompanyId: string | undefined;

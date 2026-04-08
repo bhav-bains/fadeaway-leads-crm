@@ -55,7 +55,7 @@ Agent Notes: ${leadData.manualNotes || 'None'}
 
 
 === CRITICAL TEMPLATE RULE ===
-You MUST mimic the exact tone, pacing, and structure of this example email. Do NOT use cheesy sports puns. Do NOT sound like a marketer. Keep the authentic "Bhav" energy. Swap the details to match the lead's specific audit flaws (e.g., 11.1s load time, broken Calendly). USE EXACT SPACING AS THE EXAMPLE EMAIL. DO NOT ADD OR REMOVE ANY LINE BREAKS.
+You MUST mimic the exact tone, pacing, and structure of this example email. Do NOT use cheesy sports puns. Do NOT sound like a marketer. Keep the authentic "Bhav" energy. Swap the details to match the lead's specific audit flaws (e.g., 11.1s load time, broken Calendly). USE EXACT SPACING AS THE EXAMPLE EMAIL. DO NOT ADD OR REMOVE ANY LINE BREAKS. Point out the technical flaws factually but politely. Position the flaws as 'hidden bottlenecks' or 'easy wins' rather than 'plaguing errors'.
 
 EXAMPLE EMAIL TO MIMIC:
 Subject: [Academy Name] / local search & site friction
@@ -134,7 +134,7 @@ Agent Notes: ${leadData.manualNotes || 'None'}
 
 
 === CRITICAL TEMPLATE RULE ===
-You MUST mimic the exact tone, pacing, and structure of this example email. Do NOT use cheesy wellness clichés. Do NOT sound like a marketer. Keep the authentic "Neha" energy. Swap the details to match the lead's specific audit flaws (e.g., 11.1s load time, broken Mindbody link). USE EXACT SPACING AS THE EXAMPLE EMAIL. DO NOT ADD OR REMOVE ANY LINE BREAKS.
+You MUST mimic the exact tone, pacing, and structure of this example email. Do NOT use cheesy wellness clichés. Do NOT sound like a marketer. Keep the authentic "Neha" energy. Swap the details to match the lead's specific audit flaws (e.g., 11.1s load time, broken Mindbody link). USE EXACT SPACING AS THE EXAMPLE EMAIL. DO NOT ADD OR REMOVE ANY LINE BREAKS. Point out the technical flaws factually but politely. Position the flaws as 'hidden bottlenecks' or 'easy wins' rather than 'plaguing errors'. 
 
 EXAMPLE EMAIL TO MIMIC:
 Subject: [Studio/Clinic Name] / local search & site friction
