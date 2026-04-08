@@ -37,10 +37,10 @@ export default function SettingsPage() {
         async function loadOutreachSettings() {
             const result = await getOutreachSettings();
             if (result.data) {
-                setFromEmail(result.data.from_email);
-                setSendingDomain(result.data.sending_domain);
-                setSigTitle(result.data.title);
-                setSigUrl(result.data.signature_url);
+                setFromEmail(result.data.from_email || '');
+                setSendingDomain(result.data.sending_domain || 'fadeawaycreatives.ca');
+                setSigTitle(result.data.title || '');
+                setSigUrl(result.data.signature_url || '');
             }
         }
         loadOutreachSettings();
@@ -249,32 +249,14 @@ export default function SettingsPage() {
                         {/* Live Preview */}
                         <div className="mt-4 p-4 bg-white rounded-lg border shadow-inner">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Signature Preview</p>
-                            <div style={{ borderTop: '2px solid #FF4F00', paddingTop: '12px' }}>
-                                <table cellPadding={0} cellSpacing={0}>
-                                    <tbody>
-                                        <tr>
-                                            <td style={{ verticalAlign: 'top', paddingRight: '12px' }}>
-                                                <div style={{ width: '4px', height: '44px', background: '#FF4F00', borderRadius: '2px' }}></div>
-                                            </td>
-                                            <td style={{ verticalAlign: 'top' }}>
-                                                <p style={{ margin: '0 0 2px 0', fontSize: '14px', fontWeight: 700, color: '#1a1a1a', fontFamily: 'Arial,Helvetica,sans-serif' }}>
-                                                    {fromEmail ? fromEmail.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Your Name'}
-                                                </p>
-                                                {sigTitle && (
-                                                    <p style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: 'Arial,Helvetica,sans-serif' }}>
-                                                        {sigTitle}
-                                                    </p>
-                                                )}
-                                                <p style={{ margin: 0, fontSize: '13px', fontFamily: 'Arial,Helvetica,sans-serif' }}>
-                                                    <a href={sigUrl || 'https://fadeawaycreatives.com'} style={{ textDecoration: 'none' }} target="_blank" rel="noreferrer">
-                                                        <span style={{ fontWeight: 700, color: '#FF4F00' }}>FADEAWAY</span>
-                                                        <span style={{ fontWeight: 700, color: '#1a1a1a' }}> CREATIVES</span>
-                                                    </a>
-                                                </p>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '14px', color: '#222' }}>
+                                <br /><br />
+                                --<br />
+                                {fromEmail ? fromEmail.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Your Name'}<br />
+                                {sigTitle && <>{sigTitle}<br /></>}
+                                <a href={sigUrl || 'https://fadeawaycreatives.ca/'} style={{ color: '#FF4F00', textDecoration: 'none', fontWeight: 500 }} target="_blank" rel="noreferrer">
+                                    Fadeaway Creatives
+                                </a>
                             </div>
                         </div>
                     </div>

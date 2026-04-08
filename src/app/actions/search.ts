@@ -197,35 +197,60 @@ export async function searchGooglePlaces(niche: string, city: string, pageToken?
     } else {
         try {
             const query = `${niche} in ${city}`;
-            const requestBody: any = {
-                textQuery: query,
-                languageCode: 'en',
-            };
-            if (pageToken) {
-                requestBody.pageToken = pageToken;
-            }
+            const isManualLoadMore = !!pageToken;
+            const MAX_AUTO_PAGES = isManualLoadMore ? 1 : 3; // Auto-paginate up to 3 pages (~60 results) on initial search
 
-            const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Goog-Api-Key': apiKey,
-                    'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.primaryType,nextPageToken',
-                },
-                body: JSON.stringify(requestBody)
-            });
+            let allPlaces: any[] = [];
+            let currentPageToken: string | undefined = pageToken;
+            let finalNextPageToken: string | null = null;
+            let pageCount = 0;
 
-            if (!response.ok) {
-                return { error: 'Failed to fetch places from Google.' };
-            }
+            do {
+                const requestBody: any = {
+                    textQuery: query,
+                    languageCode: 'en',
+                    pageSize: 20,
+                };
+                if (currentPageToken) {
+                    requestBody.pageToken = currentPageToken;
+                }
 
-            const data = await response.json();
+                const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Goog-Api-Key': apiKey,
+                        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.primaryType,nextPageToken',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
 
-            if (!data.places || data.places.length === 0) {
+                if (!response.ok) {
+                    if (allPlaces.length === 0) {
+                        return { error: 'Failed to fetch places from Google.' };
+                    }
+                    break; // If we already have some results, return what we have
+                }
+
+                const data = await response.json();
+
+                if (data.places && data.places.length > 0) {
+                    allPlaces = allPlaces.concat(data.places);
+                }
+
+                currentPageToken = data.nextPageToken || undefined;
+                pageCount++;
+
+                // Store the last token for "Load More" UI fallback
+                finalNextPageToken = currentPageToken || null;
+
+            } while (currentPageToken && pageCount < MAX_AUTO_PAGES);
+
+            if (allPlaces.length === 0) {
                 return { data: [] };
             }
 
-            cleanData = data.places.map((place: any) => {
+            cleanData = allPlaces.map((place: any) => {
                 return {
                     id: place.id,
                     name: place.displayName?.text || "Unknown Business",
@@ -239,21 +264,20 @@ export async function searchGooglePlaces(niche: string, city: string, pageToken?
                     ratingCount: place.userRatingCount || 0
                 };
             });
-            const fetchedNextPageToken = data.nextPageToken || null;
 
-            // 4. Save to Cache
+            // 4. Save to Cache (consolidated — all auto-fetched pages in one run)
             await supabase.from('runs').insert([{
                 workspace_id: profile.workspace_id,
                 query: queryStr,
                 city: city.toLowerCase(),
                 status: 'done',
                 started_at: new Date().toISOString(),
-                totals_json: { results: cleanData, nextPageToken: fetchedNextPageToken }
+                totals_json: { results: cleanData, nextPageToken: finalNextPageToken }
             }]);
 
             const { leads, auditedLeads } = await getHydratedLeads(profile.workspace_id, cleanData);
 
-            return { data: leads, nextPageToken: fetchedNextPageToken, auditedLeads };
+            return { data: leads, nextPageToken: finalNextPageToken, auditedLeads };
         } catch (error: any) {
             console.error("Failed to search places:", error);
             return { error: error.message || 'An unexpected error occurred.' };
